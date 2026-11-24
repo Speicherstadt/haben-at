@@ -26,7 +26,7 @@ Muss eine Änderung eine andere Datei anfassen (Code, Doku, Skill, Migration ode
 Die Skills von Haben gelten hier mit `Speicherstadt/haben-at` als Repository, außer:
 
 - `release`: nicht verwenden, siehe oben.
-- `board-pflegen`: pflegt das Board von Haben, nicht hier.
+- `board-pflegen`: pflegt das Board von Haben. Haben AT bekommt ein eigenes Board; bis es das gibt, Issues hier nicht einordnen und keine Karten im Board von Haben anlegen.
 - `jahreswerte`: die deutschen Werte kommen mit dem Merge von Haben; österreichische Jahreswerte gehören in die AT-Pakete.
 - `beitrag-pruefen` und `tdd-review`: zusätzlich prüfen, dass der Pull Request nur erlaubte Dateien ändert (Skill `at-nahtstelle`, Schritt 1).
 
