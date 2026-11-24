@@ -1,3 +1,6 @@
+> [!WARNING]
+> **Haben AT ist die österreichische Fassung von [Haben](https://github.com/Speicherstadt/haben).** Sie ist noch in Entwicklung, noch keine Beta und taugt noch nicht für die echte Buchhaltung. Mitmachen: [Speicherstadt/haben#434](https://github.com/Speicherstadt/haben/issues/434).
+
 <div align="center">
 
 <h1>Haben ist, was dir gehört.</h1>
@@ -12,7 +15,7 @@
 Rechnungen mit E-Rechnung (ZUGFeRD, XRechnung), Belege, Bankabgleich, EÜR oder Bilanz mit E-Bilanz und die Steuern
 direkt an ELSTER. Für die GoBD gebaut, auf deinem Server; Daten gehen nur an Dienste, die du selbst einschaltest.
 
-![Status: Beta](https://img.shields.io/badge/Status-Beta-orange)
+![Status: in Entwicklung](https://img.shields.io/badge/Status-in%20Entwicklung-red)
 [![CI](https://github.com/Speicherstadt/haben/actions/workflows/ci.yml/badge.svg)](https://github.com/Speicherstadt/haben/actions/workflows/ci.yml)
 [![Release](https://img.shields.io/github/v/release/Speicherstadt/haben?logo=github&label=release)](https://github.com/Speicherstadt/haben/releases/latest)
 [![Lizenz: AGPL-3.0](https://img.shields.io/badge/Lizenz-AGPL--3.0-blue)](LICENSE)
