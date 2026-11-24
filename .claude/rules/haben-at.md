@@ -24,7 +24,7 @@ git diff --name-only "$(git merge-base FETCH_HEAD HEAD)" HEAD \
   | grep -vE '^(packages/at(-[^/]+)?/|\.github/workflows/at-[^/]+$|\.claude/rules/haben-at\.md$|README\.md$)'
 ```
 
-Keine Ausgabe: in Ordnung (bei `README.md` nur die Warnung oben). Jede Zeile ist eine Datei von Haben, die der Fork ändert: im Review ein Befund, bei der eigenen Arbeit die Änderung zurücknehmen und die Nahtstelle in Haben bauen.
+Keine Ausgabe: in Ordnung (bei `README.md` nur die Warnung oben). Dieselbe Prüfung läuft bei jedem Pull Request als Workflow `.github/workflows/at-abweichungen.yml`; ändert sich die Liste, beide zusammen ändern. Jede Zeile ist eine Datei von Haben, die der Fork ändert: im Review ein Befund, bei der eigenen Arbeit die Änderung zurücknehmen und die Nahtstelle in Haben bauen.
 
 ## Nahtstelle in Haben bauen
 
