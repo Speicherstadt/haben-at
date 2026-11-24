@@ -1,0 +1,34 @@
+# Haben AT unterscheidet sich von Haben nur durch eigene Pakete und eigene neue Dateien (.claude/rules/haben-at.md).
+# Prüft je Pull Request, welche Dateien vom Stand in Haben abweichen, und schlägt bei jeder fehl, die nicht erlaubt
+# ist: Dort fehlt eine Nahtstelle in Haben. Dieselbe Liste wie in .claude/rules/haben-at.md, beide zusammen ändern.
+name: AT-Abweichungen
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: at-abweichungen-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  at-abweichungen:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # Ganze Historie, damit git merge-base den letzten Merge von Haben findet
+          fetch-depth: 0
+      - run: git fetch -q https://github.com/Speicherstadt/haben main
+      - run: |
+          abweichungen=$(git diff --name-only "$(git merge-base FETCH_HEAD HEAD)" HEAD \
+            | grep -vE '^(packages/at(-[^/]+)?/|\.github/workflows/at-[^/]+$|\.claude/rules/haben-at\.md$|README\.md$)' || true)
+          if [ -n "$abweichungen" ]; then
+            echo "Diese Dateien von Haben ändert Haben AT; dafür fehlt eine Nahtstelle in Haben (.claude/rules/haben-at.md):"
+            echo "$abweichungen" | while read -r datei; do echo "::error file=$datei::Datei von Haben geändert: $datei"; done
+            exit 1
+          fi
+          echo "Keine unerlaubte Abweichung von Haben."
