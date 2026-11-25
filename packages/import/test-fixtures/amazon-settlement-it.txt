@@ -1,0 +1,6 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+10000000006	01.11.2026 21:09:34 UTC	15.11.2026 21:09:34 UTC	17.11.2026 21:09:34 UTC	-0,10	EUR																		
+10000000006						other-transaction						other-transaction	Payable to Amazon	-4,71		01.11.2026	01.11.2026 21:09:34 UTC						
+10000000006						FBAFees					Amazon.it	FBA Inventory Storage Fee	Base fee	-0,08	Amazon	07.11.2026	07.11.2026 05:54:01 UTC						
+10000000006						FBAFees					Amazon.it	FBA Inventory Storage Fee	Tax on fee	-0,02	Amazon	07.11.2026	07.11.2026 05:54:01 UTC						
+10000000006						Debt Adjustment	601-0000000-0000001	601-0000000-0000001				Debt Adjustment	Cross-Account Debt Adjustment against FR	4,71		01.11.2026	01.11.2026 21:21:58 UTC						

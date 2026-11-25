@@ -46,7 +46,8 @@ export async function paidByTarget(column: "invoice_id" | "document_id", ids: st
 }
 
 export async function invoicePayments(ids: string[], q: Db | Tx = db, bis?: string) {
-  const groups = await invoicePaymentGroups(ids, q);
+  // Der Zahlungszeitpunkt kann vor dem Ausstellungsdatum des Belegs liegen, um dessen Leistung es geht.
+  const groups = await invoicePaymentGroups(ids, q, bis !== undefined);
   const paid = await paidByTarget("invoice_id", [...new Set([...groups.values()].flat())], q, bis);
   return new Map(
     [...groups]

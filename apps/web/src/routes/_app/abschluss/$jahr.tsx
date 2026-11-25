@@ -15,6 +15,7 @@ import { closeYearFn, getJahresabschluss } from "../../../server/functions/absch
 import styles from "../../../styles/auswertungen.css?url";
 import { ConfirmDialog } from "../../../components/ConfirmDialog.tsx";
 import { Field } from "../../../components/Field.tsx";
+import { useFokusUeberWechsel } from "../../../lib/use-fokus-ueber-wechsel.ts";
 
 export const Route = createFileRoute("/_app/abschluss/$jahr")({
   loader: ({ params }) => {
@@ -32,6 +33,8 @@ type Kapitalgesellschaft = Extract<Data, { kapitalgesellschaft: true }>;
 function AbschlussPage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  // Die Auswahl behält beim Wechsel den Fokus, obwohl die Seite neu entsteht
+  const auswahl = useFokusUeberWechsel<HTMLSelectElement>("abschluss-jahr");
   const thisYear = currentYear();
   const years = [...new Set([data.year, thisYear, thisYear - 1, thisYear - 2])].sort((a, b) => b - a);
   return (
@@ -43,7 +46,15 @@ function AbschlussPage() {
         </div>
         <Field label="Jahr">
           {(control) => (
-            <select {...control} value={data.year} onChange={(e) => navigate({ to: "/abschluss/$jahr", params: { jahr: e.target.value } })}>
+            <select
+              {...control}
+              ref={auswahl.ref}
+              value={data.year}
+              onChange={(e) => {
+                auswahl.merken();
+                void navigate({ to: "/abschluss/$jahr", params: { jahr: e.target.value } });
+              }}
+            >
               {years.map((y) => (
                 <option key={y} value={y}>
                   {y}

@@ -185,7 +185,7 @@ export async function fristenOeffnen(page: Page): Promise<void> {
   await expect(bereich).toHaveJSProperty("open", true);
 }
 
-/** Über die Schnellsuche (Strg+K) zum Treffer, ohne Neuladen: Beim Wechsel zwischen zwei Einträgen derselben Art bleibt die Seite stehen */
+/** Über die Schnellsuche (Strg+K) zum Treffer, ohne Neuladen: der Wechsel zwischen zwei Einträgen derselben Art, ohne dass der Browser die Seite neu lädt */
 export async function ueberSchnellsuche(page: Page, suche: string, treffer: RegExp): Promise<void> {
   await page.keyboard.press("Control+k");
   const palette = page.getByRole("dialog", { name: "Befehlspalette" });

@@ -6,6 +6,7 @@ import { encrypt } from "../../crypto.ts";
 import { withActor } from "../../db/actor.ts";
 import { db, schema } from "../../db/index.ts";
 import { FinanzamtError } from "./finanzamt.ts";
+import { type ErledigtStand, erledigtStand } from "./postfach-erledigt.ts";
 import { sniff, storeFile } from "../../storage.ts";
 import { ABRUF, isSimulated, loadActiveCertificate, PRODUKT_VERSION, signatur, zugang } from "../elster/index.ts";
 
@@ -55,15 +56,19 @@ export async function listPostfachDocuments(limit = 200) {
         fetchedAt: schema.postfachDocuments.fetchedAt,
       })
       .from(schema.postfachDocuments)
-      .orderBy(desc(schema.postfachDocuments.fetchedAt))
+      // Fester zweiter Schlüssel: Anhänge einer Bereitstellung kommen im selben Takt, sonst entscheidet der Zufall
+      .orderBy(desc(schema.postfachDocuments.fetchedAt), desc(schema.postfachDocuments.id))
       .limit(limit),
   ]);
+  const erledigt = await erledigtStand(rows.map((row) => row.id));
   return rows.map((row) => {
     const datum = parseBescheiddatum(row.bescheiddatum);
     return {
       ...row,
       bescheiddatumIso: datum,
       frist: datum && isBescheid(row.datenart) ? einspruchsfrist(datum, company.bundesland as Bundesland | null) : null,
+      /** „geprüft“ nimmt den Bescheid aus den Aufgaben, bis jemand ihn wieder öffnet (#1819) */
+      erledigt: erledigt.get(row.id) ?? null,
     };
   });
 }
@@ -102,7 +107,7 @@ export async function openAppealDeadlines(today: string) {
     menge.add(vergleichsform(dokument.dateibezeichnung));
     bezeichnungen.set(dokument.bereitstellungId, menge);
   }
-  const juengster = new Map<string, (typeof offen)[number]>();
+  const gruppen = new Map<string, (typeof offen)[number][]>();
   for (const bescheid of offen) {
     const zeitraum = [...(bezeichnungen.get(bescheid.bereitstellungId) ?? [])].sort().join("\u0001");
     // Ohne Veranlagungszeitraum ist der Zeitraum nicht bestimmt: Gleich benannte Bescheide verschiedener Jahre dürfen
@@ -113,12 +118,26 @@ export async function openAppealDeadlines(today: string) {
     const schluessel = einzeln
       ? `einzeln\u0000${bescheid.bereitstellungId}`
       : [bescheid.datenart, bescheid.veranlagungszeitraum, bescheid.steuernummer, zeitraum].join("\u0000");
-    const bisher = juengster.get(schluessel);
-    // Jüngster Bescheid je Steuerfall und Zeitraum; verglichen wird das gelesene Datum, nicht die rohe Spalte, weil
-    // der Parser JJJJMMTT, JJJJ-MM-TT und TT.MM.JJJJ kennt und gemischt sonst die falsche Zeile gewinnt.
-    if (!bisher || bescheid.bescheiddatumIso > bisher.bescheiddatumIso) juengster.set(schluessel, bescheid);
+    const liste = gruppen.get(schluessel) ?? [];
+    liste.push(bescheid);
+    gruppen.set(schluessel, liste);
   }
-  return [...juengster.values()].sort((a, b) => a.frist.fristende.localeCompare(b.frist.fristende));
+  // Erst nach der Gruppierung filtern: Anhänge desselben Bescheids teilen sich die Aufgabe (#1819). Maßgeblich ist das
+  // gelesene Datum, nicht die rohe Spalte, weil der Parser JJJJMMTT, JJJJ-MM-TT und TT.MM.JJJJ kennt. Tragen mehrere
+  // Anhänge dasselbe Bescheiddatum, entscheidet unter ihnen das jüngste Ereignis und nicht eines von ihnen allein: sonst
+  // bliebe „Wieder offen“ folgenlos, solange ein anderer Anhang geprüft ist (#1819). Ein älterer Bescheid derselben
+  // Gruppe lässt die Frist dagegen nicht wieder aufleben. Ohne Ereignis gilt der Bescheid als offen; bei gleichem
+  // Zeitstempel bleibt die erste Zeile, weil die Liste fest sortiert ist.
+  type MitEreignis = (typeof offen)[number] & { erledigt: ErledigtStand };
+  const offenBleibend: typeof offen = [];
+  for (const liste of gruppen.values()) {
+    const juengster = liste.reduce((a, b) => (b.bescheiddatumIso > a.bescheiddatumIso ? b : a));
+    const amJuengsten = liste.filter((d): d is MitEreignis => d.bescheiddatumIso === juengster.bescheiddatumIso && d.erledigt !== null);
+    const letztes = amJuengsten.reduce<MitEreignis | null>((a, b) => (a === null || b.erledigt.at > a.erledigt.at ? b : a), null);
+    // Zurück kommt der Anhang, dessen Vermerk den Ausschlag gibt: an ihm hängt der Knopf der Aufgabe.
+    if (letztes?.erledigt.art !== "geprueft") offenBleibend.push(letztes ?? juengster);
+  }
+  return offenBleibend.sort((a, b) => a.frist.fristende.localeCompare(b.frist.fristende));
 }
 
 export async function postfachDocumentFile(id: string) {

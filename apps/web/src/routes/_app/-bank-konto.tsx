@@ -1,17 +1,19 @@
-import { useNavigate, useRouter } from "@tanstack/react-router";
+import { useNavigate, useRouter, useRouterState } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
+import { AMAZON_MARKETPLACES } from "@haben/core";
 import { useEffect, useState, type FormEvent } from "react";
 import { NoticeBanner } from "../../components/NoticeBanner.tsx";
 import { errorMessage } from "../../lib/format.ts";
 import { PURPOSE_SHORT } from "../../lib/kontozweck.ts";
 import { useAction } from "../../lib/use-action.ts";
 import { useSubmitCheck } from "../../lib/use-submit-check.ts";
-import { addBankAccount, addProviderAccount, importStatements, updateBankAccount } from "../../server/functions/bank.ts";
+import { importStatements, updateBankAccount } from "../../server/functions/bank.ts";
 import { ExcludeAccountButton } from "../../components/BankKontoAusschliessen.tsx";
 import { Field } from "../../components/Field.tsx";
 import { UploadButton } from "../../components/UploadButton.tsx";
 import { ImportMeldungen, importMessages, type ImportMessage } from "../../components/BankImportMeldungen.tsx";
-import type { Data } from "./-bank-daten.ts";
+import { NeuesKontoForm } from "./-bank-konto-neu.tsx";
+import { type Data, offenerEntwurf, suchziel } from "./-bank-daten.ts";
 
 /** Name und Zweck des gewählten Kontos, etwa „Geschäftskonto“ und „Steuerkonto“ bei derselben Bank */
 export function AccountSettings({
@@ -31,6 +33,7 @@ export function AccountSettings({
   const [editing, setEditing] = useState(false);
   const [name, setName] = useState(account.name);
   const [purpose, setPurpose] = useState(account.purpose);
+  const [marketplace, setMarketplace] = useState(account.marketplace ?? "");
   const { busy, notice, run } = useAction();
   const { form, error, check } = useSubmitCheck({ name: name.trim() === "" ? "Trag einen Namen ein." : null });
 
@@ -53,7 +56,14 @@ export function AccountSettings({
     event.preventDefault();
     if (!check()) return;
     void run(async () => {
-      await updateFn({ data: { id: account.id, name, purpose: purpose === "zahlungsdienstleister" ? undefined : purpose } });
+      await updateFn({
+        data: {
+          id: account.id,
+          name,
+          purpose: purpose === "zahlungsdienstleister" ? undefined : purpose,
+          marketplace: account.provider === "amazon" ? marketplace : undefined,
+        },
+      });
       // Konto fest in die Adresse: ohne „konto“ zeigt die Seite das alphabetisch erste, nach dem Umbenennen ein anderes
       await navigate({ search: (prev) => ({ ...prev, konto: account.id }), replace: true });
       await router.invalidate();
@@ -86,6 +96,32 @@ export function AccountSettings({
           )}
         </Field>
       )}
+      {account.provider === "amazon" && (
+        <Field label="Marktplatz">
+          {(control) => (
+            <select
+              {...control}
+              value={marketplace}
+              onChange={(e) => setMarketplace(e.target.value)}
+              disabled={account.hasTransactions}
+              aria-describedby="marktplatz-hinweis"
+            >
+              {AMAZON_MARKETPLACES.map((m) => (
+                <option key={m} value={m}>
+                  {m}
+                </option>
+              ))}
+            </select>
+          )}
+        </Field>
+      )}
+      {account.provider === "amazon" && (
+        <span className="small muted" id="marktplatz-hinweis">
+          {account.hasTransactions
+            ? "Der Marktplatz lässt sich nach dem ersten Import nicht mehr ändern, damit kein Report in das falsche Konto läuft."
+            : "Jede Amazon-Abrechnung gehört zu ihrem Marktplatz; ein Report für einen anderen Marktplatz wird abgelehnt."}
+        </span>
+      )}
       <span className="small muted">
         Der Name ist nur Anzeige; Umsätze und Import über die IBAN bleiben, wie sie sind. Der Zweck steuert Vorschläge im Bankabgleich (Geldtransit zwischen
         eigenen Konten, Umsatzsteuer auf dem Steuerkonto, Privat beim Privatkonto), die IBAN für „Bankverbindung ändern“ beim Finanzamt und die Deckung der
@@ -99,6 +135,7 @@ export function AccountSettings({
           onClick={() => {
             setName(account.name);
             setPurpose(account.purpose);
+            setMarketplace(account.marketplace ?? "");
             setEditing(false);
           }}
           disabled={busy}
@@ -115,12 +152,14 @@ export function AccountSettings({
 
 export function SearchBox({ initial }: { initial: string }) {
   const navigate = useNavigate({ from: "/bank" });
-  const [value, setValue] = useState(initial);
+  const suche = useRouterState({ select: (state) => suchziel(state, initial) });
+  const [entwurf, setEntwurf] = useState<string | null>(null);
   useEffect(() => {
-    if (value === initial) return;
-    const timer = setTimeout(() => void navigate({ search: (prev) => ({ ...prev, suche: value || undefined, umsatz: undefined }), replace: true }), 300);
+    const offen = offenerEntwurf(entwurf, suche);
+    if (offen === null) return setEntwurf(null);
+    const timer = setTimeout(() => void navigate({ search: (prev) => ({ ...prev, suche: offen || undefined, umsatz: undefined }), replace: true }), 300);
     return () => clearTimeout(timer);
-  }, [value, initial, navigate]);
+  }, [entwurf, suche, navigate]);
   return (
     <label className="search-box">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" aria-hidden="true">
@@ -128,7 +167,7 @@ export function SearchBox({ initial }: { initial: string }) {
         <path d="M20 20l-3.5-3.5" />
       </svg>
       <span className="visually-hidden">Umsätze durchsuchen</span>
-      <input type="search" placeholder="Suchen" value={value} onChange={(e) => setValue(e.target.value)} />
+      <input type="search" placeholder="Suchen" value={entwurf ?? suche} onChange={(e) => setEntwurf(e.target.value)} />
     </label>
   );
 }
@@ -147,9 +186,6 @@ function importErgebnisse(results: Awaited<ReturnType<typeof importStatements>>,
 export function ImportControls({ data }: { data: Data }) {
   const router = useRouter();
   const importFiles = useServerFn(importStatements);
-  const addAccount = useServerFn(addBankAccount);
-  const addProvider = useServerFn(addProviderAccount);
-  const [accountType, setAccountType] = useState<"bank" | "provider">("bank");
   const [busy, setBusy] = useState(false);
   const [showAccount, setShowAccount] = useState(false);
   const [targetAccount, setTargetAccount] = useState("");
@@ -166,26 +202,6 @@ export function ImportControls({ data }: { data: Data }) {
       const results = await importFiles({ data: form });
       setMessages(importErgebnisse(results, files));
       await router.invalidate();
-    } catch (error) {
-      setMessages([{ tone: "danger", text: errorMessage(error) }]);
-    } finally {
-      setBusy(false);
-    }
-  }
-
-  async function onAddAccount(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    const form = new FormData(event.currentTarget);
-    setBusy(true);
-    try {
-      const { id } =
-        accountType === "provider"
-          ? await addProvider({ data: { name: String(form.get("name")), provider: String(form.get("provider")) as "paypal" } })
-          : await addAccount({ data: { name: String(form.get("name")), iban: String(form.get("iban")) } });
-      setShowAccount(false);
-      setTargetAccount(id);
-      await router.invalidate();
-      setMessages([{ tone: "ok", text: "Konto angelegt. Jetzt die Umsätze importieren." }]);
     } catch (error) {
       setMessages([{ tone: "danger", text: errorMessage(error) }]);
     } finally {
@@ -224,45 +240,7 @@ export function ImportControls({ data }: { data: Data }) {
           {busy ? "Importiere …" : "CSV / CAMT importieren"}
         </UploadButton>
       </div>
-      {showAccount && (
-        <form className="card" onSubmit={onAddAccount} style={{ minWidth: 320 }}>
-          <Field label="Art">
-            {(control) => (
-              <select {...control} value={accountType} onChange={(e) => setAccountType(e.target.value as "bank" | "provider")}>
-                <option value="bank">Bankkonto (mit IBAN)</option>
-                <option value="provider">Zahlungsdienstleister (PayPal, Stripe, Shopify …)</option>
-              </select>
-            )}
-          </Field>
-          {accountType === "provider" && (
-            <Field label="Dienstleister">
-              {(control) => (
-                <select {...control} name="provider" defaultValue="paypal">
-                  {data.providers.map((p) => (
-                    <option key={p.value} value={p.value}>
-                      {p.label}
-                    </option>
-                  ))}
-                </select>
-              )}
-            </Field>
-          )}
-          <Field label="Name">
-            {(control) => <input {...control} name="name" required placeholder={accountType === "provider" ? "PayPal Geschäftskonto" : "N26 Business"} />}
-          </Field>
-          {accountType === "bank" ? (
-            <Field label="IBAN">{(control) => <input {...control} name="iban" required />}</Field>
-          ) : (
-            <span className="small muted">
-              Bekommt ein eigenes Verrechnungskonto (SKR03 1361 …, SKR04 1461 …). Importiere den CSV-Export des Dienstleisters und wähle dabei dieses Konto
-              unter „Konto“.
-            </span>
-          )}
-          <button type="submit" className="btn btn-primary" disabled={busy}>
-            Konto anlegen
-          </button>
-        </form>
-      )}
+      {showAccount && <NeuesKontoForm data={data} onClose={() => setShowAccount(false)} onCreated={setTargetAccount} onMessage={setMessages} />}
       <ImportMeldungen
         messages={messages}
         accounts={data.accounts.filter((a) => a.purpose !== "zahlungsdienstleister")}

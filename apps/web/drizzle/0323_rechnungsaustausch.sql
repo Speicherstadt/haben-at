@@ -1,0 +1,3 @@
+ALTER TABLE "invoices" DROP CONSTRAINT "invoices_replaces_schluss";--> statement-breakpoint
+ALTER TABLE "invoices" ADD CONSTRAINT "invoices_replaces_invoice" CHECK ("invoices"."replaces_invoice_id" is null or ("invoices"."replaces_invoice_id" <> "invoices"."id" and "invoices"."kind" = 'rechnung' and "invoices"."corrects_id" is null and
+        ("invoices"."variant" is null or ("invoices"."variant" is not distinct from 'schluss' and "invoices"."advance_accounting" is not distinct from 'deferred'))));

@@ -50,6 +50,8 @@ export const draftSchema = z
     advanceType: z.enum(["anzahlung", "teilleistung"]).nullable().optional(),
     /** Schlussrechnung: abzuziehende Abschlagsrechnungen */
     deducts: z.array(z.uuid()).max(50).default([]),
+    /** Normaler Rechnungsaustausch: die bereits festgeschriebene ursprüngliche Rechnung. */
+    replacesInvoiceId: z.uuid().nullable().optional(),
     /** Angebot, zu dem die Rechnung gehört (Abschlags- und Schlussrechnung, Rechnung aus dem Angebot) */
     quoteId: z.uuid().nullable().default(null),
     /** Währung der Rechnung; Preise und Summen in dieser Währung, gebucht wird in Euro mit dem Kurs */

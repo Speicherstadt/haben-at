@@ -75,10 +75,11 @@ jobs:
           if grep -Eq "^deploy/|^apps/web/drizzle/|$always" <<< "$changed"; then deploy=true; else deploy=false; fi
           echo "einvoice=$einvoice" >> "$GITHUB_OUTPUT"
           echo "deploy=$deploy" >> "$GITHUB_OUTPUT"
-          # container und dev-compose im Pull Request nur, wenn Image, Compose oder Abhängigkeiten sich ändern; auf main
-          # immer (Ausgabe leer), dort fällt ein Build-Fehler aus dem App-Code spätestens auf
+          # container und dev-compose im Pull Request nur, wenn Image (mit scripts/container/: Inhalt und Prüfungen),
+          # Compose oder Abhängigkeiten sich ändern; auf main immer (Ausgabe leer), dort fällt ein Build-Fehler aus dem
+          # App-Code spätestens auf
           if [ "${EREIGNIS:-}" != push ]; then
-            if grep -Eq "Containerfile$|(^|/)compose[^/]*\.ya?ml$|^deploy/|$always" <<< "$changed"; then bild=true; else bild=false; fi
+            if grep -Eq "Containerfile$|(^|/)compose[^/]*\.ya?ml$|^deploy/|^scripts/container/|$always" <<< "$changed"; then bild=true; else bild=false; fi
             echo "bild=$bild" >> "$GITHUB_OUTPUT"
           fi
         # Als Umgebung statt ${{ }} im Skript, damit scripts/ci/doku-filter.test.ts den Block unverändert ausführen kann
@@ -100,6 +101,10 @@ jobs:
       - run: bun install --frozen-lockfile
       - run: bun run lint
       - run: bun run typecheck
+      # Ausgabe von /api/metrics mit dem Parser von Prometheus selbst (#1858)
+      - run: bun scripts/metriken/beispiel.ts | docker run --rm -i --entrypoint promtool prom/prometheus:v3.5.0 check metrics
+      # Alarmregeln für dieselben Metriken mit ihren Unit-Tests (#1871)
+      - run: docker run --rm -v "$PWD:/w:ro" -w /w --entrypoint promtool prom/prometheus:v3.5.0 test rules scripts/metriken/regeln.test.yml
 
   # Vier Teile parallel (Vitest --shard); jeder migriert seine eigene Vorlage
   test-teil:
@@ -172,9 +177,11 @@ jobs:
         env:
           TEST_DATABASE_URL: postgres://haben:haben@localhost:5432/haben_test
 
-  # Ein Ergebnis für die Regeln auf main (geforderter Check „test“), egal in wie viele Teile die Tests zerfallen
+  # Ein Ergebnis für die Regeln auf main (geforderter Check „test“), egal in wie viele Teile die Tests zerfallen.
+  # always() auch nach einem Abbruch, damit ein abgebrochener Pull-Request-Lauf nicht als übersprungen = grün zählt;
+  # auf main (push) gibt es kein Merge-Gate, dort bleibt ein abgebrochener Lauf grau statt rot. Gilt auch für e2e
   test:
-    if: ${{ always() && !github.event.pull_request.draft && needs.changes.outputs.code != 'false' }}
+    if: ${{ always() && (github.event_name != 'push' || !cancelled()) && !github.event.pull_request.draft && needs.changes.outputs.code != 'false' }}
     needs: [changes, test-teil, sollbestand-postgres]
     runs-on: ubuntu-latest
     steps:
@@ -310,7 +317,7 @@ jobs:
 
   # Ein Ergebnis für die Regeln auf main (geforderter Check „e2e“), egal in wie viele Teile die Tests zerfallen
   e2e:
-    if: ${{ always() && !github.event.pull_request.draft && needs.changes.outputs.code != 'false' }}
+    if: ${{ always() && (github.event_name != 'push' || !cancelled()) && !github.event.pull_request.draft && needs.changes.outputs.code != 'false' }}
     needs: [changes, e2e-teil]
     runs-on: ubuntu-latest
     steps:

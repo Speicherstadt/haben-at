@@ -8,3 +8,4 @@ export { BACKUP_MAX_AGE_MS, backupOverview, type BackupOverview, type BackupRun,
 export { betriebsStatus, statusAlsText, type BetriebsStatus, type BetriebsStatusOptions } from "./status.ts";
 export { appVersionsForYear, listAppVersions, type AppVersionEntry } from "./versionen.ts";
 export { latestStableVersion } from "./neueste-version.ts";
+export { metricsResponse, type MetricsOptions } from "./metriken.ts";

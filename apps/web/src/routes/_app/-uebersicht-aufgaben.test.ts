@@ -9,12 +9,16 @@ const state = vi.hoisted(() => ({ data: {} as Record<string, unknown> }));
 vi.mock("../../server/functions/backup.ts", () => ({}));
 vi.mock("../../server/functions/invoices.ts", () => ({}));
 vi.mock("../../server/functions/vat.ts", () => ({}));
+vi.mock("@tanstack/react-start", () => ({ useServerFn: (fn: unknown) => fn }));
+vi.mock("../../server/functions/finanzamt.ts", () => ({ markPostfachDocument: () => undefined }));
 vi.mock("@tanstack/react-router", () => ({
   createFileRoute: () => (options: unknown) => ({
     options,
     useLoaderData: () => state.data,
     useRouteContext: () => ({ einrichtung: null }),
   }),
+  // Die Seite nutzt den Router nur zum Neuladen nach dem Abhaken eines Bescheids
+  useRouter: () => ({ invalidate: async () => undefined }),
   // Der Bereich der Einstellungen hängt am Ziel, damit ein Test ihn sieht
   Link: ({ children, to, search, className }: { children: ReactNode; to: string; search?: { bereich?: string }; className?: string }) =>
     createElement("a", { href: search?.bereich ? `${to}?bereich=${search.bereich}` : to, className }, children),

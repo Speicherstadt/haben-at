@@ -13,7 +13,7 @@ import { ConfirmDialog } from "../../../components/ConfirmDialog.tsx";
 export const Route = createFileRoute("/_app/dauerbelege/$id")({
   loader: ({ params }) => getDauerbelegDetail({ data: params.id }),
   head: ({ loaderData }) => ({ meta: [{ title: `${loaderData?.vorlage.name ?? "Dauerbeleg"} · Haben` }] }),
-  component: DauerbelegRoute,
+  component: DauerbelegDetailPage,
 });
 
 const STATUS_TEXT = {
@@ -23,15 +23,6 @@ const STATUS_TEXT = {
 } as const;
 
 type Vorlage = Awaited<ReturnType<typeof getDauerbelegDetail>>["vorlage"];
-
-/**
- * Beim Wechsel zu einer anderen Vorlage bleibt die Seite stehen; sie entsteht je Vorlage neu, sonst blieben Formular,
- * Meldung, ungespeicherte Änderungen und Rückfragen der vorigen (#1839)
- */
-function DauerbelegRoute() {
-  const { vorlage } = Route.useLoaderData();
-  return <DauerbelegDetailPage key={vorlage.id} />;
-}
 
 function DauerbelegDetailPage() {
   const { vorlage, belege, termine, sevdesk, suppliers, categories, kleinunternehmer } = Route.useLoaderData();

@@ -114,7 +114,7 @@ export async function invoiceBooking(
   if (invoice.kind === "storno") {
     if (!invoice.correctsId) throw new BankError("Rechnung nicht zuordenbar.");
     if ((await paperCancellationIds([invoice.id], tx)).has(invoice.id)) {
-      throw new BankError("Die Schlussleistung besteht weiter; eine Erstattung lässt sich diesem Storno nicht zuordnen.");
+      throw new BankError("Die Leistung besteht weiter; eine Erstattung lässt sich diesem Storno nicht zuordnen.");
     }
     open = invoiceOpen({ ...invoice, paid: await paidOn(invoice.id), paidOnOriginal: await paidOn(invoice.correctsId), cancelled: false });
   } else {
@@ -149,8 +149,8 @@ export async function invoiceBooking(
 export async function documentBooking(
   tx: Tx,
   company: Awaited<ReturnType<typeof openBooks>>,
-  bank: LockedTransaction,
   part: { documentId: string; amount: number; sammel?: true },
+  date: string,
 ): Promise<{ lines: PostingLine[]; description: string; target: Zuordnungsziel }> {
   // Sperre wie bei der Rechnung: Zwei gleichzeitige Zuordnungen könnten den Beleg sonst überzahlen
   const [doc] = await tx.select().from(schema.documents).where(eq(schema.documents.id, part.documentId)).for("update");
@@ -165,6 +165,6 @@ export async function documentBooking(
   // Vorsteuer vom Zwischenkonto auf die Vorsteuer: die Zahlung einer Rechnung, deren Leistung beim Buchen noch nicht
   // ausgeführt war (#693), und die Erstattung einer Gutschrift „erstattet bereits Bezahltes“ (#786). Hat die Buchung
   // nichts auf dem Zwischenkonto, kommt nichts dazu (Altbestand, Kleinunternehmer, 0 %)
-  lines.push(...(await vorsteuerAusgleich(tx, doc, await belegTotals(tx, doc), part.amount, company.kontenrahmen, bank.bookingDate)));
+  lines.push(...(await vorsteuerAusgleich(tx, doc, await belegTotals(tx, doc), part.amount, company.kontenrahmen, date)));
   return { lines, description: `Zahlung Beleg ${doc.invoiceNumber || doc.filename} · ${doc.supplierName}`, target: { documentId: doc.id } };
 }

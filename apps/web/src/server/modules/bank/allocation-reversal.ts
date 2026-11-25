@@ -28,14 +28,15 @@ export async function reverseAllocation(actor: string, allocationId: string, dat
   // vorgehaltener Auszug kann selbst in der Zukunft liegen, dort wäre ein Datum in seinem Zeitraum richtig.
   const heute = today();
   await withActor(actor, async (tx) => {
-    // Die Zuordnung steht buchhalterisch am Buchungsdatum ihres Umsatzes; früher kann die Aufhebung nicht wirken.
-    // Liegt die Zahlung selbst in der Zukunft (vorgehaltener Auszug), ist heute schon der früheste Tag.
+    // Die Aufhebung kann frühestens mit der ursprünglichen Buchung bzw. Wiederzuordnung wirken.
+    // Liegt ein vorgehaltener Auszug in der Zukunft, ist heute schon der früheste Tag.
     const [row] = await tx
-      .select({ bookingDate: schema.bankTransactions.bookingDate })
+      .select({ bookingDate: schema.bankTransactions.bookingDate, date: schema.allocations.date })
       .from(schema.allocations)
       .innerJoin(schema.bankTransactions, eq(schema.bankTransactions.id, schema.allocations.transactionId))
       .where(eq(schema.allocations.id, allocationId));
     // Nur der Weg über die Oberfläche datiert vor; der Belegstorno bringt sein Datum selbst mit (cancellationDate)
+    if (row?.date && date < row.date) throw new BankError(`Das Datum liegt vor dem Wirktag der Zuordnung (${row.date}).`);
     if (row && row.bookingDate <= heute && date < row.bookingDate) {
       throw new BankError(`Das Datum liegt vor dem Buchungsdatum der Zahlung (${row.bookingDate}). Eine Aufhebung wirkt an dem Tag, an dem sie erklärt wird.`);
     }
@@ -58,7 +59,7 @@ export async function reverseAllocationIn(tx: Tx, allocationId: string, date: st
     .select({ bookingDate: schema.bankTransactions.bookingDate })
     .from(schema.bankTransactions)
     .where(eq(schema.bankTransactions.id, allocation.transactionId));
-  const tag = zahlung && date < zahlung.bookingDate && zahlung.bookingDate <= heute ? zahlung.bookingDate : date;
+  const zahlungstag = zahlung && date < zahlung.bookingDate && zahlung.bookingDate <= heute ? zahlung.bookingDate : date;
   // Liegt die Zahlung in einem abgeschlossenen Jahr, bleibt die Aufhebung gesperrt (Entscheidung des Maintainers zu #782).
   // Eine anschließende Neu-Zuordnung bucht am Buchungsdatum der Zahlung (bookPart) und fiele damit ins gesperrte Jahr:
   // der Vorgang bliebe halb offen und das Bankkonto wiche ab. Die Sperre greift vor dem ersten Schreibvorgang, für den
@@ -81,6 +82,7 @@ export async function reverseAllocationIn(tx: Tx, allocationId: string, date: st
         .orderBy(asc(schema.allocations.createdAt))
         .for("update")
     : [allocation];
+  const tag = parts.reduce((latest, part) => (part.date && part.date > latest ? part.date : latest), zahlungstag);
   await darlehenAufhebenPruefen(tx, parts);
   for (const part of parts) await reverseOne(tx, part, tag);
   // Mit der Zahlung ausgebuchter Rest (Skonto): ohne die Zahlung wäre er falsch, also mit aufheben

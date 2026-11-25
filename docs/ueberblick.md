@@ -14,7 +14,7 @@ Den Rundgang in Bildern gibt die [Startseite](index.md), den schnellen
 
 | | |
 |---|---|
-| [Installation](installation.md) | Docker Compose mit [Compose-Generator](compose-generator.md) für `.env` und Override, Podman Quadlets, Caddy, Secrets, eigener Reverse Proxy; Vorlagen für [Synology](synology.md), [TrueNAS SCALE](truenas.md), [Unraid](unraid.md) und [Coolify](coolify.md), Anleitung für [Plesk](plesk.md), Helm-Chart für [Kubernetes](kubernetes.md); dazu [Konfiguration](installation-konfiguration.md) (Datenbankrollen, Umgebungsvariablen), [Backup und Updates](installation-backup.md), [Anbindungen](installation-anbindungen.md) (ERiC, KI, Kontoabruf), [Single Sign-on](installation-sso.md) und [Häufige Probleme](installation-probleme.md) |
+| [Installation](installation.md) | Docker Compose mit [Compose-Generator](compose-generator.md) für `.env` und Override, Podman Quadlets, Caddy, Secrets, eigener Reverse Proxy; Vorlagen für [Synology](synology.md), [TrueNAS SCALE](truenas.md), [Unraid](unraid.md) und [Coolify](coolify.md), Anleitung für [Plesk](plesk.md), Helm-Chart für [Kubernetes](kubernetes.md); dazu [Konfiguration](installation-konfiguration.md) (Datenbankrollen, Umgebungsvariablen), [Backup und Updates](installation-backup.md), [Anbindungen](installation-anbindungen.md) (ERiC, KI, Kontoabruf), [Single Sign-on](installation-sso.md), [Überwachung](installation-ueberwachung.md) (Prometheus) und [Häufige Probleme](installation-probleme.md) |
 
 ## Einrichten
 
@@ -52,7 +52,7 @@ Den Rundgang in Bildern gibt die [Startseite](index.md), den schnellen
 | [Bankimport und Abgleich](bank.md) | Automatischer Abruf per PSD2 (Enable Banking) oder FinTS, DKB, Commerzbank, BW-Bank, Deutsche Bank, Norisbank, Postbank, ING, C24, N26, Swan, CAMT.053, Dubletten, Saldenprüfung, Vorschläge, Teilzahlungen, Buchungen ohne Beleg |
 | [Andere Banken](bank-spaltenzuordnung.md) | CSV einer Bank ohne eigenes Format: Spalten einmal zuordnen, gespeichert je Konto |
 | [Abruf über FinTS](bank-fints.md) | Bankkonten direkt bei der Bank abrufen, mit PIN, TAN-Verfahren und pushTAN, ohne Enable Banking |
-| [Zahlungsdienstleister](bank-zahlungsdienstleister.md) | PayPal, Stripe, Shopify Payments, eBay, Etsy, SumUp, Google Play und App Store mit Gebühren und Auszahlungen |
+| [Zahlungsdienstleister](bank-zahlungsdienstleister.md) | PayPal, Stripe, Shopify Payments, eBay, Etsy, Amazon, SumUp, Google Play und App Store mit Gebühren und Auszahlungen |
 | [Steuerzahlungen und Darlehen](bank-steuern-darlehen.md) | Zahlungen an Finanzamt und Gemeinde, Erstattungen, Darlehen mit Tilgung und Zinsen |
 
 ## Steuern und Auswertungen
@@ -60,6 +60,7 @@ Den Rundgang in Bildern gibt die [Startseite](index.md), den schnellen
 | | |
 |---|---|
 | [Umsatzsteuer-Voranmeldung](umsatzsteuer.md) | Kennzahlen aus den Buchungen, Vorprüfung, Prüfen, Test- und Echtübermittlung, XML-Import in Mein ELSTER, Berichtigung, Zahlung an das Finanzamt, Dauerfristverlängerung, Zusammenfassende Meldung |
+| [Umsatzsteuerliche Sondergebiete](umsatzsteuer-sondergebiete.md) | Anschriftenhinweise, tatsächlicher Leistungsort und Grenzen der PLZ-Erkennung |
 | [Jahreserklärungen](jahreserklaerung.md) | Umsatzsteuererklärung, Anlage EÜR mit AVEÜR und Einkommensteuererklärung, für GmbH und UG Körperschaft- und Gewerbesteuererklärung, Prüfen, Test- und Echtübermittlung, Belege von ELSTER |
 | [Auswertungen und Jahresexport](auswertungen.md) | EÜR, offene Posten, Monatsverlauf, CSV, Archiv-ZIP mit Prüfsummen, Aufbewahrung |
 | [BWA](bwa.md) | Einnahmen-Ausgaben-BWA und Kurzfristige Erfolgsrechnung für GmbH und UG, Kennzahlen, Vorjahres- und Periodenvergleich, Drilldown mit „Warum?“ |
@@ -96,7 +97,7 @@ Den Rundgang in Bildern gibt die [Startseite](index.md), den schnellen
 | | |
 |---|---|
 | [KI-Assistenten (MCP)](ki-assistenten.md) | Haben im Gespräch mit Claude Code, Claude Desktop oder einem lokalen Modell abfragen; nur lesen, API-Tokens, Datenschutz |
-| [REST-API](api.md) | Kontakte, Katalogartikel und Rechnungsentwürfe aus eigenen Werkzeugen, dazu Angebote lesen. Eine externe Referenz aus Plattform und Bestellnummer verhindert doppelte Entwürfe. Belege aus Dokumentenarchiven und Skripten. OpenAPI, Rechte je Token und Beispiele mit curl |
+| [REST-API](api.md) | Kontakte, Katalogartikel, Rechnungs- und Angebotsentwürfe aus eigenen Werkzeugen. Eine externe Referenz aus Plattform und Bestellnummer verhindert doppelte Rechnungsentwürfe. Belege aus Dokumentenarchiven und Skripten. OpenAPI, Rechte je Token und Beispiele mit curl |
 | [Dokumentenarchiv](dokumentenarchiv.md) | Festgeschriebene Rechnungen als Kopie an ein Archiv wie Paperless-ngx oder Belegt, Status an der Rechnung; Belege aus dem Archiv über die REST-API |
 | [Eigene Seiten](eigene-seiten.md) | Eigene Werkzeuge wie eine Bestellübersicht aus n8n als Menüeintrag, im Rahmen angezeigt |
 

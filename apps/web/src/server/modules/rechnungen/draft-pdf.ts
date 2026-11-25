@@ -7,6 +7,7 @@ import { ansprechpartnerSnapshot, loadCompany, loadLetterhead, loadUnitCodes, wi
 import { invoiceDocumentTotals, invoiceTotalsById } from "./invoice-taxes.ts";
 import { deductedRefs } from "./advance-deductions.ts";
 import { buyerFrom, documentFor, sellerFrom } from "./invoice-document.ts";
+import { loadReplacement } from "./invoice-replacement.ts";
 import { getInvoice } from "./invoices.ts";
 import { getQuote, quoteDocumentFor } from "./quotes.ts";
 import { angebotMitPlatzhaltern, rechnungMitPlatzhaltern } from "./beleg-platzhalter.ts";
@@ -33,6 +34,7 @@ export async function invoiceDraftPdf(id: string): Promise<DraftPdf | null> {
   const buyer = original?.buyer ?? (contact ? buyerFrom(contact, await ansprechpartnerSnapshot(db, invoice.contactPersonId)) : null);
   if (!buyer) throw new DraftPdfError(NO_CUSTOMER);
   const company = await loadCompany();
+  const prior = corrects ?? (await loadReplacement(invoice, db));
   // Die Nummer setzt renderInvoiceDraftPdf
   const { number: _none, ...doc } = rechnungMitPlatzhaltern(
     documentFor(
@@ -43,7 +45,7 @@ export async function invoiceDraftPdf(id: string): Promise<DraftPdf | null> {
       sellerFrom(company),
       buyer,
       "",
-      corrects?.number ? { number: corrects.number, issueDate: corrects.issueDate } : null,
+      prior?.number ? { number: prior.number, issueDate: prior.issueDate } : null,
       await deductedRefs(lines),
       await directDebitFor(invoice, company, db),
       await loadUnitCodes(),

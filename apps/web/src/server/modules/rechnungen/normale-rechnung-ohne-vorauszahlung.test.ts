@@ -58,17 +58,19 @@ describe.skipIf(!testDatabaseUrl)("Normale Rechnung mit Leistungszeitraum ohne V
     ).id;
   });
 
-  async function invoice(serviceFrom: string | null, serviceTo: string | null, issueDate: string) {
-    const draft = await invoices.createDraft(actor, {
+  async function invoice(serviceFrom: string | null, serviceTo: string | null, issueDate: string, replacesInvoiceId?: string) {
+    const input = {
       contactId,
       issueDate,
       serviceFrom,
       serviceTo,
       paymentTermDays: 14,
-      format: "zugferd",
+      format: "zugferd" as const,
       note: "",
-      lines: [{ description: "Beratung", quantity: 1000, unit: "Psch.", unitPrice: 100_000, taxRate: 1900 }],
-    });
+      lines: [{ description: "Beratung", quantity: 1000, unit: "Psch.", unitPrice: 100_000, taxRate: 1900 as const }],
+      replacesInvoiceId,
+    };
+    const draft = await invoices.createDraft(actor, input);
     return invoices.finalizeInvoice(actor, draft.id, kleinunternehmerStand);
   }
 
@@ -103,6 +105,37 @@ describe.skipIf(!testDatabaseUrl)("Normale Rechnung mit Leistungszeitraum ohne V
     { form: "einzelunternehmen", frame: "SKR04", mode: "soll" },
     { form: "einzelunternehmen", frame: "SKR03", mode: "ist" },
   ] as const;
+
+  for (const { form, frame, mode } of cases)
+    it(`${form}, ${frame}, ${mode}: Rechnungsaustausch nach Zahlung erfasst dieselbe Leistung einmal`, async () => {
+      await sql`update company set rechtsform = ${form}, kontenrahmen = ${frame}, versteuerung = ${mode}`;
+      const original = await invoice("2026-10-01", "2026-10-31", "2026-10-12");
+      await pay(original.id, "2026-10-20", 119_000);
+      const [payment] = await sql`select id from allocations where invoice_id = ${original.id}`;
+      await invoices.cancelInvoice(actor, original.id, "2026-12-10");
+      const replacement = await invoice("2026-10-01", "2026-10-31", "2026-12-15", original.id);
+
+      expect.soft(await kz81(10)).toEqual({ kz81: 100_000, tax81: 19_000 });
+      expect.soft(await kz81(12)).toEqual({ kz81: 0, tax81: 0 });
+      expect.soft((await bank.invoicePaymentList(replacement.id)).map(({ id }) => id)).toEqual([payment!.id]);
+      expect(await sql`select id, invoice_id from allocations`).toEqual([{ id: payment!.id, invoice_id: original.id }]);
+    }, 30_000);
+
+  for (const { form, frame, mode } of cases)
+    it(`${form}, ${frame}, ${mode}: Ersatz ohne Leistungszeitraum übernimmt eine Teilzahlung`, async () => {
+      await sql`update company set rechtsform = ${form}, kontenrahmen = ${frame}, versteuerung = ${mode}`;
+      const original = await invoice(null, null, "2026-10-12");
+      await pay(original.id, "2026-10-20", 59_500);
+      const october = await kz81(10);
+      await invoices.cancelInvoice(actor, original.id, "2026-12-10");
+      const replacement = await invoice(null, null, "2026-12-15", original.id);
+
+      expect(await kz81(10)).toEqual(october);
+      expect(await kz81(12)).toEqual({ kz81: 0, tax81: 0 });
+      expect((await bank.openItems()).find((item) => item.id === replacement.id)).toMatchObject({ open: 59_500 });
+      expect(await sql`select * from haben_integrity_problems(100)`).toEqual([]);
+    }, 30_000);
+
   for (const { form, frame, mode } of cases)
     it(`${form}, ${frame}, ${mode}: Leistung Oktober, Rechnung 5.11., Zahlung 20.11. wie bisher`, async () => {
       await sql`update company set rechtsform = ${form}, kontenrahmen = ${frame}, versteuerung = ${mode}`;

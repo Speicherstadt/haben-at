@@ -137,6 +137,39 @@ async function dateiwechselPruefen(page: Page, card: Locator) {
   }
 }
 
+async function kontaktePruefen(page: Page) {
+  await gehe(page, "/archiv");
+  await page.getByRole("button", { name: "Umzug aus WISO", exact: true }).click();
+  const card = page.getByRole("region", { name: "WISO-Kontaktliste als PDF prüfen" });
+  const text = [
+    "Kunden / Interessenten",
+    "Name, Anschrift            Telefon       Kontaktdaten     Bankverbindung      Umsatz         Notizen",
+    "0081, Muster-Kontakt       k.A.          k.A.             k.A.                 Umsatz: 0      k.A.",
+    "Beispielweg 3",
+    "L - 1821 Luxembourg",
+    "2. Anschrift",
+    "k.A.",
+  ].join("\n");
+  await card.getByLabel("WISO-Kontaktliste").setInputFiles({ name: "Kontakte.pdf", mimeType: "application/pdf", buffer: Buffer.from(textPdf([text])) });
+  await card.getByRole("button", { name: "Kontakte prüfen" }).click();
+  await expect(card.getByRole("row", { name: /0081 Muster-Kontakt/ })).toContainText("Land prüfen");
+  const pendingDownload = page.waitForEvent("download");
+  await card.getByRole("button", { name: "CSV-Entwurf laden" }).click();
+  const download = await pendingDownload;
+  expect(download.suggestedFilename()).toBe("WISO-Kontakte-Entwurf.csv");
+  const csv = await readFile((await download.path())!, "utf8");
+  await card.getByRole("link", { name: "Zum Kontaktimport" }).click();
+  const datei = page.getByLabel("CSV-Datei");
+  const vorschau = page.getByRole("button", { name: "Vorschau", exact: true });
+  await datei.setInputFiles({ name: "Entwurf.csv", mimeType: "text/csv", buffer: Buffer.from(csv) });
+  await vorschau.click();
+  await expect(page.getByRole("row", { name: /Muster-Kontakt/ })).toContainText("Fehler");
+  const ergaenzt = csv.replace("L - 1821", "1821").replace("Bitte prüfen;Bitte prüfen", "LU;Kunde");
+  await datei.setInputFiles({ name: "Ergaenzt.csv", mimeType: "text/csv", buffer: Buffer.from(ergaenzt) });
+  await vorschau.click();
+  await expect(page.getByRole("row", { name: /Muster-Kontakt/ })).toContainText("Neu");
+}
+
 test("WISO: Testlauf, Import und Beleg im Archiv", async ({ browser }) => {
   const { page, pageErrors } = await durchlaufSeite(browser);
   await einrichten(page);
@@ -190,5 +223,6 @@ test("WISO: Testlauf, Import und Beleg im Archiv", async ({ browser }) => {
   await datei.setInputFiles({ name: "Ergaenzt.csv", mimeType: "text/csv", buffer: Buffer.from(ergaenzt) });
   await vorschau.click();
   await expect(page.getByRole("row", { name: /Rechenmaschine/ })).toContainText("Neu");
+  await kontaktePruefen(page);
   expect(pageErrors).toEqual([]);
 });

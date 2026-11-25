@@ -23,6 +23,7 @@ import { Row } from "../../../components/jahreserklaerung/Row.tsx";
 import type { Data } from "../../../components/jahreserklaerung/typen.ts";
 import { SubmitPanel } from "./-jahr-senden.tsx";
 import { EuerSection, History, Issues, UstSection } from "./-jahr-teile.tsx";
+import { useFokusUeberWechsel } from "../../../lib/use-fokus-ueber-wechsel.ts";
 
 export const Route = createFileRoute("/_app/jahreserklaerung/$jahr")({
   loader: ({ params }) => {
@@ -37,6 +38,8 @@ export const Route = createFileRoute("/_app/jahreserklaerung/$jahr")({
 function AnnualPage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  // Die Auswahl behält beim Wechsel den Fokus, obwohl die Seite neu entsteht
+  const auswahl = useFokusUeberWechsel<HTMLSelectElement>("jahreserklaerung-jahr");
   // GmbH und UG: Körperschaftsteuer statt Einkommensteuer, Bilanz statt EÜR; hier bleibt die Umsatzsteuer
   const gesellschaft = isKapitalgesellschaft(data.rechtsform);
 
@@ -49,7 +52,15 @@ function AnnualPage() {
         </div>
         <Field label="Jahr">
           {(control) => (
-            <select {...control} value={data.year} onChange={(e) => navigate({ to: "/jahreserklaerung/$jahr", params: { jahr: e.target.value } })}>
+            <select
+              {...control}
+              ref={auswahl.ref}
+              value={data.year}
+              onChange={(e) => {
+                auswahl.merken();
+                void navigate({ to: "/jahreserklaerung/$jahr", params: { jahr: e.target.value } });
+              }}
+            >
               {(data.years.includes(data.year) ? data.years : [data.year, ...data.years]).map((y) => (
                 <option key={y} value={y}>
                   {y}
@@ -82,15 +93,15 @@ function AnnualPage() {
         {!gesellschaft && <Reihenfolge data={data} />}
         <UstSection data={data} />
         {!gesellschaft && <EuerSection data={data} />}
-        {!gesellschaft && <EstSection key={data.year} data={data} />}
+        {!gesellschaft && <EstSection data={data} />}
         {data.kapg && <KapgGemeinsameHinweise data={data} />}
         {data.kapg && <KstSection data={data} />}
         {data.kapg && <GewstSection data={data} />}
-        {data.kapg && <KapgAngaben key={`kapg-${data.year}`} data={data} />}
+        {data.kapg && <KapgAngaben data={data} />}
         {/* Die vorausgefüllte Steuererklärung gibt es nur für die Einkommensteuer einer Person */}
         {!gesellschaft && (
           <div id="vast" className="jump-target">
-            <VastBelege key={`vast-${data.year}`} data={data} />
+            <VastBelege data={data} />
           </div>
         )}
         <History data={data} />

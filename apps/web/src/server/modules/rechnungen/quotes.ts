@@ -456,6 +456,8 @@ export async function quoteIssues(id: string): Promise<string[]> {
       sellerUstId: company.ustId,
       buyerUstId: contact?.ustId,
       buyerCountry: contact?.land,
+      buyerPostalCode: contact?.plz,
+      foreignPlace: quote.taxDetails?.foreignPlace,
       exemptionReason: quote.exemptionReason,
     }),
   );

@@ -9,10 +9,11 @@ import { createDocumentHandler, getDocumentHandler, listDocumentsHandler } from 
 import { createInvoiceHandler, deleteInvoiceHandler, getInvoiceHandler, listInvoicesHandler, updateInvoiceHandler } from "./invoices.ts";
 import { createServiceEntryHandler, deleteServiceEntryHandler, getServiceEntryHandler, listServiceEntriesHandler } from "./leistungen.ts";
 import { serviceEntryQuerySchema } from "./leistungen-schemas.ts";
-import { getQuoteHandler, listQuotesHandler } from "./quotes.ts";
+import { createQuoteHandler, deleteQuoteHandler, getQuoteHandler, listQuotesHandler, updateQuoteHandler } from "./quotes.ts";
 import { quoteQuerySchema } from "./quotes-schemas.ts";
 import { createRecurringInvoiceHandler } from "./recurring-invoices.ts";
-import { contactQuerySchema, documentQuerySchema, invoiceQuerySchema } from "./schemas.ts";
+import { documentQuerySchema } from "./belege-schemas.ts";
+import { contactQuerySchema, invoiceQuerySchema } from "./schemas.ts";
 
 /*
  * Alle Endpunkte von /api/v1 an einer Stelle: Pfad, Recht, Handler und was die OpenAPI-Beschreibung über sie sagt.
@@ -167,6 +168,21 @@ export const API_ROUTES: ApiRoute[] = [
     handler: listQuotesHandler,
   },
   {
+    method: "POST",
+    path: "/angebote",
+    scope: "angebote:entwuerfe",
+    tag: "Angebote",
+    summary: "Angebotsentwurf anlegen",
+    description:
+      "Legt einen Entwurf an; festgeschrieben und versendet wird in Haben. Nicht angegebene Felder nehmen die Vorgaben eines neuen Angebots in Haben: " +
+      "Gültigkeit ab dem Angebotsdatum, Kopf- und Fußtext aus den Standard-Textbausteinen, Steuer aus den Firmendaten, die Sprache die des Kontakts; " +
+      "dazu die Standardanhänge. Jeder Aufruf legt einen Entwurf an.",
+    requestBody: "QuoteDraftCreate",
+    responses: { 201: { schema: "Quote", description: "Entwurf angelegt; Location zeigt auf ihn" } },
+    errors: { 422: "Den Kontakt gibt es nicht, oder er ist kein Kunde" },
+    handler: createQuoteHandler,
+  },
+  {
     method: "GET",
     path: "/angebote/{id}",
     scope: "angebote:lesen",
@@ -175,6 +191,34 @@ export const API_ROUTES: ApiRoute[] = [
     description: "Entwürfe und festgeschriebene Angebote, mit Positionen, der Antwort des Kunden und der Rechnung, die daraus entstanden ist.",
     responses: { 200: { schema: "Quote", description: "Das Angebot" } },
     handler: getQuoteHandler,
+  },
+  {
+    method: "PATCH",
+    path: "/angebote/{id}",
+    scope: "angebote:entwuerfe",
+    tag: "Angebote",
+    summary: "Angebotsentwurf ändern",
+    description:
+      "Nur solange Entwurf. Nur die genannten Felder ändern sich; lines ersetzt alle Positionen samt ihren Rabatten. Gesamtrabatt und Zahlungsplan " +
+      "aus Haben bleiben; wechselt der Kunde, entfällt der Ansprechpartner.",
+    requestBody: "QuoteDraftPatch",
+    responses: { 200: { schema: "Quote", description: "Der geänderte Entwurf" } },
+    errors: {
+      409: "Das Angebot ist festgeschrieben, oder Gesamtrabatt bzw. Zahlungsplan aus Haben passen nicht zu den neuen Positionen",
+      422: "Den Kontakt gibt es nicht, oder er ist kein Kunde",
+    },
+    handler: updateQuoteHandler,
+  },
+  {
+    method: "DELETE",
+    path: "/angebote/{id}",
+    scope: "angebote:entwuerfe",
+    tag: "Angebote",
+    summary: "Angebotsentwurf löschen",
+    description: "Nur solange Entwurf, mit seinen Anhängen.",
+    responses: { 204: { schema: null, description: "Gelöscht" } },
+    errors: { 409: "Das Angebot ist festgeschrieben" },
+    handler: deleteQuoteHandler,
   },
   {
     method: "GET",

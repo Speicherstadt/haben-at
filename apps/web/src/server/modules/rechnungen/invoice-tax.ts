@@ -105,7 +105,7 @@ export function invoiceTaxReader(q: Db | Tx = db) {
   const modes = new Map<number, Promise<Versteuerung>>();
   async function original(invoice: Reference): Promise<Reference> {
     const current = await snapshot(invoice);
-    const parentId = current.correctsId ?? (current.advanceAccounting === "deferred" ? current.replacesInvoiceId : null);
+    const parentId = current.correctsId ?? (current.variant === null || current.advanceAccounting === "deferred" ? current.replacesInvoiceId : null);
     if (!parentId) return current;
     let found = originals.get(parentId);
     if (!found) {
@@ -167,7 +167,16 @@ export function invoiceTaxReader(q: Db | Tx = db) {
    */
   async function invoicePostingAllowed(invoice: Reference): Promise<boolean> {
     const current = await snapshot(invoice);
+    if (current.variant === null && current.replacesInvoiceId) return false;
     const first = await original(current);
+    if (current.kind === "storno" && current.correctsId && first.variant === null && first.advanceAccounting !== "deferred") {
+      const [replacement] = await q
+        .select({ id: schema.invoices.id })
+        .from(schema.invoices)
+        .where(and(eq(schema.invoices.replacesInvoiceId, current.correctsId), eq(schema.invoices.status, "final")))
+        .limit(1);
+      if (replacement) return false;
+    }
     if (first.advanceAccounting !== "deferred") return true;
     if (first.variant === null) return false;
     return first.advanceType !== "anzahlung" && !current.replacesInvoiceId && !(current.kind === "storno" && first.variant === "schluss");

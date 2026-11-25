@@ -32,11 +32,10 @@ function DocumentPage() {
   const inhaber = Route.useRouteContext().user.role === "inhaber";
   const { document: doc, navigation } = data;
   const running = doc.extractionStatus === "laeuft";
-  // Das Formular meldet ungespeicherte Änderungen; beim Wechsel des Belegs setzt es sich mit false neu auf
+  // Das Formular meldet ungespeicherte Änderungen
   const [dirty, setDirty] = useState(false);
   // Ungespeicherte Änderungen: erst nachfragen, der Dialog wechselt und verwirft sie
-  const [pending, setPending] = useState<{ from: string; to: string } | null>(null);
-  const pendingId = pending?.from === doc.id ? pending.to : null;
+  const [pendingId, setPendingId] = useState<string | null>(null);
 
   useEffect(() => {
     if (!running) return;
@@ -50,7 +49,7 @@ function DocumentPage() {
   /** Zu einem anderen Beleg oder ("liste") zurück zur Liste; bei ungespeicherten Änderungen erst nachfragen */
   function go(id: string | null) {
     if (!id) return;
-    if (dirty) setPending({ from: doc.id, to: id });
+    if (dirty) setPendingId(id);
     else leaveTo(id);
   }
   const duplizieren = useBelegDuplizieren(data, duplikat, dirty, leaveTo);
@@ -86,7 +85,7 @@ function DocumentPage() {
         confirmLabel="Ohne Speichern wechseln"
         danger
         onConfirm={() => pendingId && leaveTo(pendingId)}
-        onClose={() => setPending(null)}
+        onClose={() => setPendingId(null)}
       >
         <p>Der Beleg hat ungespeicherte Änderungen. Beim Wechsel gehen sie verloren.</p>
       </ConfirmDialog>
@@ -95,10 +94,10 @@ function DocumentPage() {
         <Preview doc={doc} />
         <div className="stack">
           {/* key: nach dem Auslesen oder Speichern mit den neuen Werten aufsetzen, mit Millisekunden auch in derselben Sekunde (#1824) */}
-          <DocumentForm key={`${doc.id}-${doc.updatedAt.toISOString()}`} data={data} inhaber={inhaber} onDirtyChange={setDirty} />
+          <DocumentForm key={doc.updatedAt.toISOString()} data={data} inhaber={inhaber} onDirtyChange={setDirty} />
           {/* Außerhalb des Formulars: Enter im Feld „Grund“ speichert nicht */}
-          {inhaber && <DocumentCancellation key={`storno-${doc.id}`} data={data} />}
-          <BelegVerrechnung key={`verrechnung-${doc.id}`} documentId={doc.id} supplier={doc.supplierName} readOnly={!inhaber} />
+          {inhaber && <DocumentCancellation data={data} />}
+          <BelegVerrechnung documentId={doc.id} supplier={doc.supplierName} readOnly={!inhaber} />
         </div>
       </div>
     </>

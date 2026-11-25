@@ -7,7 +7,7 @@ description: >-
 
 # Roadmap
 
-Was als Nächstes kommt, steht im **[Project „Roadmap“ auf GitHub](https://github.com/orgs/Speicherstadt/projects/3)**.
+Was als Nächstes kommt, steht im **[Project „Roadmap Haben“ auf GitHub](https://github.com/orgs/Speicherstadt/projects/3)**.
 Jede Karte ist ein Issue oder ein Entwurf, mit Aufwand, Bereich und Hinweis:
 
 | Spalte | Bedeutung |
@@ -47,7 +47,7 @@ Kapitel der Doku und in den [Releases](https://github.com/Speicherstadt/haben/re
 | Texterkennung (OCR) vor dem Modell | Für Scans und Fotos liest ein Vision-Modell besser als OCR mit Textmodell; eine OCR-Engine wäre eine weitere Abhängigkeit im Container ([#128](https://github.com/Speicherstadt/haben/issues/128), [#329](https://github.com/Speicherstadt/haben/issues/329)) |
 | Getrennte Verzeichnisse für Kunden und Lieferanten | Eine Firma ist oft beides und stünde sonst doppelt drin; ein Kontakt hat die Rollen Kunde und Lieferant ([#224](https://github.com/Speicherstadt/haben/issues/224)) |
 | Zweite Farbe auf Rechnungen | Text und Beträge in der Akzentfarbe lesen sich schlecht; die Grautöne leiten sich aus der Akzentfarbe ab ([#222](https://github.com/Speicherstadt/haben/issues/222)) |
-| Sachkonto je Bankkonto | Alle Bankkonten buchen auf das Bankkonto des Kontenrahmens; getrennte Salden im Kontenblatt lohnen den Aufwand nicht. Benennen vor dem Anlegen würde den Ablauf mit Enable Banking unterbrechen, und der Zweck eines Kontos setzt nicht die IBAN auf Rechnungen ([#105](https://github.com/Speicherstadt/haben/issues/105)) |
+| Bankkonto vor dem Anlegen benennen, IBAN auf Rechnungen aus dem Zweck | Benennen vor dem Anlegen würde den Ablauf mit Enable Banking unterbrechen, und der Zweck eines Kontos setzt nicht die IBAN auf Rechnungen ([#105](https://github.com/Speicherstadt/haben/issues/105)). Ein eigenes Sachkonto je Bankkonto ist nicht mehr ausgeschlossen ([#1853](https://github.com/Speicherstadt/haben/issues/1853)) |
 | Fremdwährungsrechnung mit deutscher Umsatzsteuer bei Ist-Versteuerung | Gesperrt statt nachgebildet: Sonst änderte sich die Steuer einer festgeschriebenen Rechnung mit dem Kurs bei der Zahlung ([#109](https://github.com/Speicherstadt/haben/issues/109)) |
 | Eigene Anbindung einzelner Dokumentenarchive (etwa Paperless-ngx oder Belegt), Beleg nur als Link | Haben bleibt lose gekoppelt und offen für jedes Archiv: Alle schicken Belege über dieselbe [API](api.md#belege), keines bekommt Sonderlogik in Haben; festgeschriebene Rechnungen gibt Haben ebenso allgemein an eine Adresse weiter ([Dokumentenarchiv](dokumentenarchiv.md)). Das Original gehört nach Haben (§ 147 AO); ein Link auf ein fremdes Archiv sichert weder Unveränderbarkeit noch Aufbewahrung ([#631](https://github.com/Speicherstadt/haben/issues/631)) |
 | Andere Datenbank oder Aufteilung in Dienste | Unveränderbarkeit nach GoBD hängt an Triggern in PostgreSQL; ohne sie hinge sie nur an Berechtigungen und App-Code ([#63](https://github.com/Speicherstadt/haben/issues/63)) |

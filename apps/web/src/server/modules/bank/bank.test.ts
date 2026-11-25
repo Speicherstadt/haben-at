@@ -848,6 +848,25 @@ describe.skipIf(!testDatabaseUrl)("Bankabgleich (Postgres)", () => {
       await bank.reverseAllocation(actor, allocation!.id);
     }
     expect((await auswertungen.openPositions("2026-10-05")).payables.map((p) => p.open)).toEqual([11_006, 11_006]);
+
+    const [originalBeleg, originalRest] = await sql<{ id: string; kind: string; date: string }[]>`
+      select a.id, a.kind, r.date::text from allocations a join allocations r on r.reverses_id = a.id
+      where a.transaction_id = ${first!.id} order by a.kind`;
+    expect([originalBeleg?.kind, originalRest?.kind]).toEqual(["document", "kursdifferenz"]);
+    const wiederzuordnung = {
+      transactionId: first!.id,
+      target: { kind: "document" as const, documentId: more },
+      rest: "kursdifferenz" as const,
+      reassignsId: originalBeleg!.id,
+      restReassignsId: originalRest!.id,
+    };
+    await bank.allocateWithRest(actor, wiederzuordnung);
+    expect(
+      await sql`
+      select a.kind, a.date::text, a.reassigns_id, j.date::text as journal from allocations a
+      join journal_entries j on j.source_type = 'allocation' and j.source_id = a.id
+      where a.transaction_id = ${first!.id} and a.reassigns_id is not null order by a.kind`,
+    ).toEqual([originalBeleg!, originalRest!].map(({ id, kind, date }) => ({ kind, date, journal: date, reassigns_id: id })));
   }, 30_000);
 
   it("Zahlungsdienstleister: PayPal-Export ins eigene Verrechnungskonto, Auszahlung als Geldtransit zur Bank", async () => {
@@ -1018,6 +1037,161 @@ describe.skipIf(!testDatabaseUrl)("Bankabgleich (Postgres)", () => {
     },
     30_000,
   );
+
+  const AMAZON_HEADER = [
+    "settlement-id",
+    "settlement-start-date",
+    "settlement-end-date",
+    "deposit-date",
+    "total-amount",
+    "currency",
+    "transaction-type",
+    "order-id",
+    "merchant-order-id",
+    "adjustment-id",
+    "shipment-id",
+    "marketplace-name",
+    "amount-type",
+    "amount-description",
+    "amount",
+    "fulfillment-id",
+    "posted-date",
+    "posted-date-time",
+    "order-item-code",
+    "merchant-order-item-id",
+    "merchant-adjustment-item-id",
+    "sku",
+    "quantity-purchased",
+    "promotion-id",
+  ].join("\t");
+
+  const AMAZON_CASES = [
+    { kontenrahmen: "SKR03", versteuerung: "ist", accounts: { bank: "1200", ust: "1776", fee: "4970", revenue: "8400" } },
+    { kontenrahmen: "SKR03", versteuerung: "soll", accounts: { bank: "1200", ust: "1776", fee: "4970", revenue: "8400" } },
+    { kontenrahmen: "SKR04", versteuerung: "ist", accounts: { bank: "1800", ust: "3806", fee: "6855", revenue: "4400" } },
+    { kontenrahmen: "SKR04", versteuerung: "soll", accounts: { bank: "1800", ust: "3806", fee: "6855", revenue: "4400" } },
+  ] as const;
+
+  /** Eine Position des Settlement Reports; der Marktplatz steht in der Spalte marketplace-name */
+  const amazonLine = (marketplace: string, type: string, order: string, amountType: string, description: string, amount: string) => {
+    const c = Array(24).fill("");
+    c[0] = "28165578252";
+    c[6] = type;
+    c[7] = order;
+    c[8] = order;
+    c[11] = marketplace;
+    c[12] = amountType;
+    c[13] = description;
+    c[14] = amount;
+    c[15] = "AFN";
+    c[16] = "03.10.2026";
+    c[17] = "03.10.2026 12:00:00 UTC";
+    return c.join("\t");
+  };
+  const amazonSummary = (total: string) => {
+    const c = Array(24).fill("");
+    c[0] = "28165578252";
+    c[1] = "01.10.2026 00:00:00 UTC";
+    c[2] = "15.10.2026 00:00:00 UTC";
+    c[3] = "17.10.2026 00:00:00 UTC";
+    c[4] = total;
+    c[5] = "EUR";
+    return c.join("\t");
+  };
+  /** Kleiner Settlement Report (eine Bestellung, Erlös 119,00, Gebühr 14,27, Auszahlung 104,73) für einen Marktplatz */
+  const amazonReport = (marketplace: string) =>
+    [
+      AMAZON_HEADER,
+      amazonSummary("104,73"),
+      amazonLine(marketplace, "Order", "1-11111-11111", "ItemPrice", "Principal", "119,00"),
+      amazonLine(marketplace, "Order", "1-11111-11111", "ItemFees", "Commission", "-14,27"),
+    ].join("\n");
+
+  it.each(AMAZON_CASES)(
+    "Amazon ($kontenrahmen, $versteuerung): Bestellung brutto zur Rechnung, Gebühren als Aufwand, Auszahlung als Geldtransit",
+    async ({ kontenrahmen, versteuerung, accounts }) => {
+      await sql`update company set kontenrahmen = ${kontenrahmen}, versteuerung = ${versteuerung}`;
+      const { invoice } = await finalInvoice(10_000);
+      const amazon = await bank.createProviderAccount(actor, { name: "Amazon.de", provider: "amazon", marketplace: "Amazon.de" });
+      const file = { bytes: new TextEncoder().encode(amazonReport("Amazon.de")), filename: "amazon-settlement.txt" };
+      expect(await bank.importStatement(actor, file, amazon.id)).toMatchObject({ added: 3 });
+      expect(await bank.importStatement(actor, file, amazon.id)).toMatchObject({ added: 0 });
+      await bank.importStatement(
+        actor,
+        {
+          bytes: dkbCsv([incoming("18.10.26", "Amazon Payments Europe S.C.A.", "LU280019410000000000", "Amazon Auszahlung 28165578252", "104,73")]),
+          filename: "dkb.csv",
+        },
+        null,
+      );
+
+      const [payment] = await sql`select id from bank_transactions where amount = 11900`;
+      const [fee] = await sql`select id from bank_transactions where amount = -1427`;
+      const [payout] = await sql`select id from bank_transactions where amount = -10473`;
+      const [incomingPayout] = await sql`select id from bank_transactions where amount = 10473`;
+      await bank.allocate(actor, { kind: "invoice", transactionId: payment!.id, invoiceId: invoice.id, amount: 11_900 });
+      await bank.allocate(actor, { kind: "gebuehren", transactionId: fee!.id, amount: -1_427 });
+      expect((await bank.transactionDetail(payout!.id))?.direct).toMatchObject({ kind: "geldtransit", counterpart: { id: incomingPayout!.id } });
+      expect((await bank.transactionDetail(incomingPayout!.id))?.direct).toMatchObject({ kind: "geldtransit", counterpart: { id: payout!.id } });
+      await bank.allocateTransfer(actor, { transactionId: incomingPayout!.id, counterpartId: payout!.id });
+
+      const balances = Object.fromEntries(
+        (await sql`select account, sum(debit - credit)::int as saldo from journal_lines group by account having sum(debit - credit) <> 0 order by 1`).map(
+          (r) => [r.account, r.saldo],
+        ),
+      );
+      expect(balances).toEqual({ [accounts.bank]: 10_473, [accounts.ust]: -1_900, [accounts.fee]: 1_427, [accounts.revenue]: -10_000 });
+      expect((await bank.listAccounts()).find((a) => a.id === amazon.id)).toMatchObject({ providerBalance: 0, openCount: 0 });
+    },
+    30_000,
+  );
+
+  it("Amazon: Marktplatz ist Pflicht und der Import prüft ihn", async () => {
+    await expect(bank.createProviderAccount(actor, { name: "Amazon", provider: "amazon" })).rejects.toThrow(/Marktplatz/);
+    await expect(bank.createProviderAccount(actor, { name: "Amazon", provider: "amazon", marketplace: "Amazon.xx" })).rejects.toThrow(/Marktplatz/);
+    const amazon = await bank.createProviderAccount(actor, { name: "Amazon.de", provider: "amazon", marketplace: "Amazon.de" });
+    const file = (marketplace: string) => ({ bytes: new TextEncoder().encode(amazonReport(marketplace)), filename: "amazon-settlement.txt" });
+
+    // Falscher Marktplatz: nichts wird importiert.
+    await expect(bank.importStatement(actor, file("Amazon.fr"), amazon.id)).rejects.toThrow(/gehört zu Amazon\.fr.*für Amazon\.de/);
+    expect(await bank.importStatement(actor, file("Amazon.de"), amazon.id)).toMatchObject({ added: 3 });
+
+    // Ein Amazon-Report gehört nicht in ein anderes Zahlungsdienstleister-Konto.
+    const paypal = await bank.createProviderAccount(actor, { name: "PayPal", provider: "paypal" });
+    await expect(bank.importStatement(actor, file("Amazon.de"), paypal.id)).rejects.toThrow(/kein Amazon-Konto/);
+
+    // Auch ohne Marktplatzangabe in der Datei (nur Sonderzeilen) bleibt es eine Amazon-Abrechnung: in das Amazon-Konto
+    // geht sie (die Umsätze sind schon da, added 0), in ein fremdes nicht.
+    await expect(bank.importStatement(actor, file(""), paypal.id)).rejects.toThrow(/Amazon-Abrechnung/);
+    await expect(bank.importStatement(actor, file(""), amazon.id)).resolves.toMatchObject({ added: 0 });
+  }, 30_000);
+
+  it("Amazon: der Marktplatz lässt sich nur ändern, solange das Konto leer ist", async () => {
+    const amazon = await bank.createProviderAccount(actor, { name: "Amazon", provider: "amazon", marketplace: "Amazon.de" });
+    await bank.updateAccount(actor, { id: amazon.id, name: "Amazon", marketplace: "Amazon.fr" });
+    expect((await bank.listAccounts()).find((a) => a.id === amazon.id)).toMatchObject({ marketplace: "Amazon.fr", hasTransactions: false });
+    await expect(bank.updateAccount(actor, { id: amazon.id, name: "Amazon", marketplace: "Amazon.xx" })).rejects.toThrow(/Unbekannter Marktplatz/);
+
+    await bank.importStatement(actor, { bytes: new TextEncoder().encode(amazonReport("Amazon.fr")), filename: "amazon-settlement.txt" }, amazon.id);
+    expect((await bank.listAccounts()).find((a) => a.id === amazon.id)).toMatchObject({ hasTransactions: true });
+    await expect(bank.updateAccount(actor, { id: amazon.id, name: "Amazon", marketplace: "Amazon.de" })).rejects.toThrow(/keine Umsätze/);
+  }, 30_000);
+
+  it("Amazon: der Name lässt sich auch mit Umsätzen ändern, der Marktplatz bleibt", async () => {
+    const amazon = await bank.createProviderAccount(actor, { name: "Amazon", provider: "amazon", marketplace: "Amazon.de" });
+    await bank.importStatement(actor, { bytes: new TextEncoder().encode(amazonReport("Amazon.de")), filename: "amazon-settlement.txt" }, amazon.id);
+
+    await bank.updateAccount(actor, { id: amazon.id, name: "Amazon DE", marketplace: "Amazon.de" });
+    expect((await bank.listAccounts()).find((a) => a.id === amazon.id)).toMatchObject({ name: "Amazon DE", marketplace: "Amazon.de" });
+
+    await expect(bank.updateAccount(actor, { id: amazon.id, name: "Amazon DE", marketplace: "Amazon.fr" })).rejects.toThrow(/keine Umsätze/);
+  }, 30_000);
+
+  it("Amazon: ein zweites Konto für denselben Marktplatz ist möglich", async () => {
+    await bank.createProviderAccount(actor, { name: "Amazon 1", provider: "amazon", marketplace: "Amazon.de" });
+    const zweites = await bank.createProviderAccount(actor, { name: "Amazon 2", provider: "amazon", marketplace: "Amazon.de" });
+    expect(zweites).toMatchObject({ provider: "amazon", marketplace: "Amazon.de" });
+  }, 30_000);
 
   it("Gebühren eines Monats der Sammelrechnung des Dienstleisters zuordnen", async () => {
     const stripe = await bank.createProviderAccount(actor, { name: "Stripe", provider: "stripe" });

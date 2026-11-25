@@ -19,16 +19,24 @@ export const serviceDate = (input: { issueDate: string; serviceFrom?: string | n
   input.serviceTo ?? input.serviceFrom ?? input.issueDate;
 
 /**
- * Kurs eines Entwurfs: Storno und Korrektur übernehmen Währung und Kurs der ursprünglichen Rechnung (dieselben Euro-Beträge
- * mit umgekehrtem Vorzeichen), sonst wie bei Belegen (resolveExchangeRate) für den Monat der Leistung.
+ * Storno, Korrektur und Rechnungsaustausch behalten die Währung und den Kurs des ursprünglichen Belegs.
+ * Sonst gilt wie bei Belegen der Monat der Leistung (resolveExchangeRate).
  */
 export async function draftRate(tx: Tx, input: DraftInput, correctsId: string | null, previous: Invoice | null): Promise<{ currency: string } & RateFields> {
-  if (correctsId) {
-    const [original] = await tx.select().from(schema.invoices).where(eq(schema.invoices.id, correctsId));
+  const originalId = correctsId ?? input.replacesInvoiceId;
+  if (originalId) {
+    const [original] = await tx.select().from(schema.invoices).where(eq(schema.invoices.id, originalId));
     if (original) {
+      const originalRate = original.exchangeRate ? parseExchangeRate(original.exchangeRate) : null;
+      if (input.replacesInvoiceId && input.currency && input.currency.trim().toUpperCase() !== original.currency) {
+        throw new InvoiceError("Die Währung muss mit der ersetzten Rechnung übereinstimmen.");
+      }
+      if (input.replacesInvoiceId && input.exchangeRate?.trim() && parseExchangeRate(input.exchangeRate) !== originalRate) {
+        throw new InvoiceError("Der Umrechnungskurs muss mit der ersetzten Rechnung übereinstimmen.");
+      }
       return {
         currency: original.currency,
-        exchangeRate: original.exchangeRate ? parseExchangeRate(original.exchangeRate) : null,
+        exchangeRate: originalRate,
         exchangeRateSource: original.exchangeRateSource,
         exchangeRateDate: original.exchangeRateDate,
       };
@@ -57,7 +65,7 @@ export async function draftRate(tx: Tx, input: DraftInput, correctsId: string | 
 export async function applyRateToDraft(tx: Tx, invoice: Invoice): Promise<boolean> {
   // Ohne Kurs oder mit übernommenem USt-Kurs: Ein eigener Kurs bleibt, ein geänderter Tabellenkurs (etwa der amtliche statt
   // eines vorab von Hand eingetragenen) gilt auch für den Entwurf
-  if (invoice.status !== "draft" || invoice.currency === "EUR" || invoice.correctsId) return false;
+  if (invoice.status !== "draft" || invoice.currency === "EUR" || invoice.correctsId || invoice.replacesInvoiceId) return false;
   if (invoice.exchangeRate && invoice.exchangeRateSource !== "ust") return false;
   const rate = await resolveExchangeRate(
     tx,

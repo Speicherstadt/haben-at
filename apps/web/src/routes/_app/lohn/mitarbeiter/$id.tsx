@@ -49,7 +49,6 @@ function MitarbeiterPage() {
           Änderung neu.
         </p>
         <MitarbeiterForm
-          key={m.id}
           initial={m}
           arten={beschaeftigungsartenFor(gesellschaft, m.art)}
           submitLabel="Speichern"

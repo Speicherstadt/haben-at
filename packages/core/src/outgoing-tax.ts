@@ -1,12 +1,13 @@
 import type { Section4Provision, TurnoverClassification } from "./gesamtumsatz.ts";
 import type { TaxTreatment } from "./treatment.ts";
+import { vatTerritory } from "./vat-territories.ts";
 
 /** Festgestellte Tatsachen der Ausgangsleistung; null bedeutet ungeklärt, keine Ableitung aus dem Belegfreitext. */
 export interface OutgoingTaxDetails {
   exemption: Section4Provision | null;
   ancillary: boolean | null;
   /** Tatsächlicher Leistungsort; noForeignVat bestätigt gesondert, dass keine ausländische Steuer auszuweisen ist. */
-  foreignPlace: { country: string; noForeignVat: boolean } | null;
+  foreignPlace: { country: string; postalCode?: string; noForeignVat: boolean } | null;
   assetDisposal: boolean;
 }
 
@@ -23,7 +24,10 @@ export function outgoingTaxDetailConflict(
     (treatment === "reverse_charge" || treatment === "drittland" || treatment === "eu_sonstige") &&
     first?.foreignPlace &&
     second?.foreignPlace &&
-    first.foreignPlace.country !== second.foreignPlace.country
+    (first.foreignPlace.country !== second.foreignPlace.country ||
+      (first.foreignPlace.postalCode &&
+        second.foreignPlace.postalCode &&
+        first.foreignPlace.postalCode.replace(/\s/g, "") !== second.foreignPlace.postalCode.replace(/\s/g, "")))
   )
     return "foreignPlace";
   return null;
@@ -42,9 +46,16 @@ export function outgoingTaxClassification(treatment: TaxTreatment, details: Outg
     case "reverse_charge":
     case "drittland":
     case "eu_sonstige": {
-      const country = details?.foreignPlace?.country;
+      const place = details?.foreignPlace;
+      const country = place?.country;
       // Ob eine ausländische Steuer anfällt, ändert nicht den ausländischen Leistungsort (§ 1 Abs. 1 Nr. 1 UStG).
-      return { kind: "foreign", confirmed: country?.length === 2 && /^[A-Z]{2}$/.test(country) && country !== "DE" };
+      return {
+        kind: "foreign",
+        confirmed:
+          country?.length === 2 &&
+          /^[A-Z]{2}$/.test(country) &&
+          (country !== "DE" || (treatment === "drittland" && Boolean(vatTerritory(country, place?.postalCode)))),
+      };
     }
     case "ausfuhr":
       return { kind: "section4", provision: { number: "1", letter: "a" }, ancillary: null };

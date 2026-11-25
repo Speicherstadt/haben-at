@@ -1096,6 +1096,76 @@ test("Seiten mit den Daten dieses Abschnitts ohne axe-Verstöße", async () => {
   await ohneAxeVerstoesse(page, ["/anlagen", "/darlehen", "/bank", "/ueberweisungen", ibanBeleg]);
 });
 
+test("Wiederzuordnung: je Teil die aufgehobene Zuordnung wählen (#1454)", async () => {
+  const buchungstag = dkb(day(-18));
+  const aufhebungen = [day(-8), day(-5)];
+  const zweck = "Zahlung mit zwei aufgehobenen Teilzuordnungen";
+  const csv = [
+    '"Girokonto";"DE45 1203 0000 1234 5678 90"',
+    '""',
+    '"Buchungsdatum";"Wertstellung";"Status";"Zahlungspflichtige*r";"Zahlungsempfänger*in";"Verwendungszweck";"Umsatztyp";"IBAN";"Betrag (€)";"Gläubiger-ID";"Mandatsreferenz";"Kundenreferenz"',
+    [buchungstag, buchungstag, "Gebucht", "Firma Musterkonto", "Mustermann IT", zweck, "Eingang", "", "238,00", "", "", ""]
+      .map((wert) => `"${wert}"`)
+      .join(";"),
+  ].join("\n");
+  await go("/bank");
+  await page.getByLabel("Kontoauszugsdateien").setInputFiles({ name: "wiederzuordnung.csv", mimeType: "text/csv", buffer: Buffer.from(`\ufeff${csv}`) });
+  await expect(page.getByText(/wiederzuordnung\.csv: 1 neue Umsätze/)).toBeVisible();
+  const sql = postgres(databaseUrlFuer(DURCHLAUF), { max: 1 });
+  try {
+    const umsaetze = await sql<{ id: string; bank_account_id: string }[]>`
+      select id, bank_account_id from bank_transactions where purpose = ${zweck}`;
+    expect(umsaetze).toHaveLength(1);
+    const { id, bank_account_id } = umsaetze[0]!;
+    await go(`/bank?${new URLSearchParams({ filter: "alle", konto: bank_account_id, umsatz: id, suche: zweck })}`);
+    const panel = page.getByRole("complementary", { name: "Zuordnung" });
+    for (const anzahl of [1, 2]) {
+      const direkt = panel.getByRole("button", { name: "Direkt buchen", exact: true });
+      if (await direkt.isVisible()) await direkt.click();
+      await panel.getByLabel("Buchen als").selectOption("zinsertrag");
+      await panel.getByLabel("Betrag", { exact: true }).fill("119,00");
+      await panel.getByRole("button", { name: "Buchen", exact: true }).click();
+      await expect(panel.getByRole("button", { name: "Aufheben", exact: true })).toHaveCount(anzahl);
+    }
+    for (const [i, datum] of aufhebungen.entries()) {
+      await panel.getByRole("button", { name: "Aufheben", exact: true }).first().click();
+      const dialog = page.getByRole("dialog", { name: "Zuordnung aufheben?" });
+      await dialog.getByLabel("Tag der Aufhebung").fill(datum);
+      await dialog.getByRole("button", { name: "Zuordnung aufheben" }).click();
+      await expect(panel.getByText("aufgehoben", { exact: true })).toHaveCount(i + 1);
+    }
+
+    await panel.getByRole("button", { name: "Aufteilen", exact: true }).click();
+    const form = panel.getByRole("form", { name: "Umsatz aufteilen" });
+    for (const teil of [1, 2]) {
+      const zeile = form.locator(".split-row").nth(teil - 1);
+      await zeile.getByLabel(`Teil ${teil}`, { exact: true }).selectOption("zinsertrag");
+      await zeile.getByLabel("Betrag", { exact: true }).fill("119,00");
+    }
+    const bezuege = form.getByRole("combobox", { name: "Aufgehobene Zuordnung" });
+    await expect(bezuege).toHaveCount(2);
+    await form.getByRole("button", { name: "Aufteilen und buchen" }).click();
+    await expect(bezuege.first()).toBeFocused();
+    await expect(bezuege.first()).toHaveAccessibleDescription("Wähle die aufgehobene Zuordnung, zu der der Betrag gehört.");
+    for (const [i, datum] of aufhebungen.entries()) {
+      const aufgehobenAm = datum.split("-").reverse().join(".");
+      const auswahl = bezuege.nth(i);
+      const option = auswahl.getByRole("option", { name: new RegExp(aufgehobenAm.replaceAll(".", "\\.")) });
+      await expect(option).toHaveText(`Zinserträge · ${aufgehobenAm} · 119,00 €`);
+      await auswahl.selectOption((await option.getAttribute("value")) ?? "");
+    }
+    await form.getByRole("button", { name: "Aufteilen und buchen" }).click();
+    await expect(panel.getByRole("button", { name: "Aufteilung aufheben", exact: true })).toBeVisible();
+    const zeilen = await sql`select a.date::text as wirksam, r.date::text as aufhebung, j.date::text as journal
+      from allocations a join allocations r on r.reverses_id = a.reassigns_id
+      join journal_entries j on j.source_id = a.id and j.source_type = 'allocation'
+      where a.transaction_id = ${id} order by a.date`;
+    expect(zeilen).toEqual(aufhebungen.map((datum) => ({ wirksam: datum, aufhebung: datum, journal: datum })));
+  } finally {
+    await sql.end();
+  }
+});
+
 test("Keine Fehler im Browser", async () => {
   expect(pageErrors).toEqual([]);
 });

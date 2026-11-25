@@ -22,7 +22,10 @@ hide:
 Freiberufler, Selbstständige und kleine GmbHs. Mit Open-Source-Software, die du prüfen kannst, von der
 E-Rechnung bis zur Voranmeldung an ELSTER, ohne Abo.</p>
 
-[Rundgang starten](#rundgang){ .md-button .md-button--primary } [Installieren](installation.md){ .md-button } [Alle Funktionen im Detail](ueberblick.md){ .md-button }
+[Rundgang starten](#rundgang){ .md-button .md-button--primary } [Installieren](installation.md){ .md-button } [Gehostet buchen](gehostet.md#haben-gehostet){ .md-button } [Alle Funktionen im Detail](ueberblick.md){ .md-button }
+
+Kein eigener Server? [Haben gehostet](gehostet.md#haben-gehostet) gibt es für 12,90 € im Monat, zuzüglich Umsatzsteuer.
+{ .showcase-hinweis }
 
 <p class="showcase-hinweis">Haben ist noch in der Beta: vor jedem Update ein Backup.</p>
 
@@ -236,6 +239,12 @@ Vorlagen für [Synology](synology.md) und [TrueNAS](truenas.md) ohne Kommandozei
 Wer nicht selbst installieren will, gibt Claude Code oder einem anderen Agenten SSH-Zugang zum Server
 und die [Installationsanleitung](installation.md).
 </div>
+<div markdown>
+**☁️ Oder gehostet**
+
+Kein eigener Server: Wir betreiben deine Instanz, mit Updates, Backups und ELSTER.
+[Haben gehostet](gehostet.md#haben-gehostet)
+</div>
 </div>
 
 <div class="showcase-hero" markdown>
@@ -245,6 +254,6 @@ und die [Installationsanleitung](installation.md).
 <p class="showcase-claim">Gemacht für Freiberufler, Selbstständige, Kleinunternehmer und kleine GmbHs
 und UGs – für alle, die lieber arbeiten als buchen.</p>
 
-[Installieren](installation.md){ .md-button .md-button--primary } [Mitwirken](mitwirken.md){ .md-button } [Quellcode auf GitHub](https://github.com/Speicherstadt/haben){ .md-button }
+[Installieren](installation.md){ .md-button .md-button--primary } [Gehostet buchen](gehostet.md#haben-gehostet){ .md-button } [Mitwirken](mitwirken.md){ .md-button } [Quellcode auf GitHub](https://github.com/Speicherstadt/haben){ .md-button }
 
 </div>

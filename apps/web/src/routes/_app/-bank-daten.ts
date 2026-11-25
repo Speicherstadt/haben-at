@@ -61,17 +61,17 @@ export function zuAufhebendeZuordnung(
 ): AufzuhebendeZuordnung {
   const teile = a.splitId ? allocations.filter((other) => other.splitId === a.splitId && !other.reversed) : [a];
   const heute = todayInGermany();
+  const wirksam = teile.reduce((latest, teil) => (teil.date && teil.date > latest ? teil.date : latest), tag);
+  const vorgemerkt = wirksam > heute;
   return {
     id: a.id,
     bezeichnung: a.splitId ? `Aufteilung in ${teile.length} Teile` : zuordnungText(a, gesellschaft),
     betrag: teile.reduce((summe, teil) => summe + teil.amount, 0),
     aufteilung: a.splitId !== null,
     mitBeleg: teile.some((teil) => teil.kind === "invoice" || teil.kind === "document"),
-    // Die Zuordnung steht am Buchungsdatum ihres Umsatzes; früher kann die Aufhebung nicht wirken (#782). Liegt die
-    // Zahlung selbst in der Zukunft, ist heute der früheste Tag — dieselbe Grenze prüft der Server.
-    tag: tag <= heute ? tag : heute,
-    // Ist der Zeitraum der Zahlung gemeldet, wirkt die Aufhebung heute; sonst gehört die Korrektur dorthin (#782)
-    gemeldet: gemeldeteMonate.includes(tag.slice(0, 7)),
+    // Maßgeblich ist der späteste Wirktag der Teile; für vorgemerkte Umsätze in der Zukunft gilt heute (#782).
+    tag: vorgemerkt ? heute : wirksam,
+    gemeldet: gemeldeteMonate.includes(wirksam.slice(0, 7)),
   };
 }
 
@@ -89,7 +89,6 @@ export function direktKategorie(kind: "kategorie" | "aufladung", transactionId: 
 }
 
 export const KATEGORIE_OPTION = { value: "kategorie", label: "Einnahme oder Ausgabe (Kategorie, Steuersatz)" } as const;
-
 export const STEUER_OPTION = { value: "steuer", label: "Steuerzahlung oder Erstattung (Finanzamt, Gemeinde)" } as const;
 
 export const DARLEHEN_OPTION = { value: "darlehen", label: "Darlehen: Auszahlung, Tilgung, Zinsen oder Gebühren" } as const;
@@ -153,4 +152,81 @@ export function restAngebot(target: Posten | undefined, tx: Detail["transaction"
       ? tx.open - target.open
       : 0;
   return { feeRest, rest, restKinds, exchangeDifference, korrektur };
+}
+
+/** Die Konten, deren Umsätze die Seite zeigt: alle („Alle Konten“) oder das gewählte */
+export function gezeigteKonten(data: Pick<Data, "allAccounts" | "accounts" | "accountId">) {
+  return data.allAccounts ? data.accounts : data.accounts.filter((a) => a.id === data.accountId);
+}
+
+/** Offene Umsätze der Konten, wie am Filter „Offen“, und ob es überhaupt Umsätze gibt (ein leerer Auszug bringt keine) */
+export function bankStand(konten: readonly Pick<Data["accounts"][number], "openCount" | "hasTransactions">[]) {
+  return { offen: konten.reduce((summe, konto) => summe + konto.openCount, 0), hatUmsaetze: konten.some((konto) => konto.hasTransactions) };
+}
+
+type Ort = { pathname: string; search: { suche?: unknown } };
+
+/** Suche der Adresse, zu der der Router gerade geht, auch solange sie noch lädt; beim Verlassen der Seite die bisherige */
+export function suchziel({ location, resolvedLocation }: { location: Ort; resolvedLocation?: Ort }, initial: string): string {
+  if (location.pathname !== resolvedLocation?.pathname) return initial;
+  return typeof location.search.suche === "string" ? location.search.suche : "";
+}
+
+/** Getippte, noch nicht übernommene Suche; `null`, sobald sie in der Adresse steht. Danach gilt die Adresse, auch wenn „Nächsten offenen“ sie leert */
+export function offenerEntwurf(entwurf: string | null, suche: string): string | null {
+  return entwurf === suche ? null : entwurf;
+}
+
+/** Zähler über der Umsatzliste (#1253); die Zahl ist die am Filter „Offen“ */
+export function offenText(anzahl: number): string {
+  return `${anzahl} ${anzahl === 1 ? "Umsatz" : "Umsätze"} noch offen`;
+}
+
+/** Nächster offener Umsatz nach dem gewählten, am Ende der Liste wieder von vorn; als privat gekennzeichnete zählen wie im Filter „Offen“ nicht */
+export function nextOpenAfter(
+  transactions: readonly Pick<Data["transactions"][number], "id" | "open" | "privat">[],
+  id: string | undefined,
+): string | undefined {
+  const index = transactions.findIndex((t) => t.id === id);
+  const after = [...transactions.slice(index + 1), ...transactions.slice(0, Math.max(index, 0))];
+  return after.find((t) => t.open !== 0 && !t.privat && t.id !== id)?.id;
+}
+
+/**
+ * Wohin „Nächsten offenen“ führt: zum nächsten offenen Umsatz der Liste. Steht keiner in der Liste (Filter, Suche), zu allen
+ * offenen ohne Suche, wo der erste gewählt wird; null, wenn die Liste schon alle offenen zeigt, der Knopf also nichts täte.
+ */
+export function naechstenOffenenZiel(naechsteId: string | undefined, filter: string | undefined, suche: string | undefined) {
+  if (naechsteId) return { umsatz: naechsteId };
+  if ((filter ?? "offen") === "offen" && !suche) return null;
+  return { filter: "offen" as const, suche: undefined, umsatz: undefined };
+}
+
+/** Zähler solange etwas offen ist; „Alles zugeordnet.“ mit nächsten Schritten nur, wenn es Umsätze gibt (sonst gibt es nichts zuzuordnen) */
+export function fortschrittArt(offen: number, hatUmsaetze: boolean): "offen" | "fertig" | "keine" {
+  return offen > 0 ? "offen" : hatUmsaetze ? "fertig" : "keine";
+}
+
+/** Links nach „Alles zugeordnet.“; Kleinunternehmer geben in der Regel keine Voranmeldung ab */
+export function naechsteSchritte(kleinunternehmer: boolean): ("belege" | "voranmeldung")[] {
+  return kleinunternehmer ? ["belege"] : ["belege", "voranmeldung"];
+}
+
+/** Text der leeren Liste; im Filter „Offen“ steht „Alles zugeordnet.“ schon im Fortschritt */
+export function leereListeText(filter: string, anzahl: number, offen: number, hatUmsaetze: boolean): string | null {
+  if (anzahl > 0 || (filter === "offen" && fortschrittArt(offen, hatUmsaetze) === "fertig")) return null;
+  return filter === "vorschlag" ? "Keine Umsätze mit Vorschlag." : "Keine Umsätze.";
+}
+
+/**
+ * Gibt es für Anbieter und Marktplatz schon ein Konto? Dann fragt die Seite vor dem Anlegen nach, statt ein zweites
+ * anzulegen (zwei Verkäuferkonten am selben Marktplatz sind erlaubt, aber die Marktplatzprüfung sieht beide als passend
+ * an, der Import muss also selbst wählen).
+ */
+export function hatMarktplatzKonto(
+  accounts: { provider: string | null; marketplace: string | null }[],
+  provider: string,
+  marketplace: string | null | undefined,
+): boolean {
+  return !!marketplace && accounts.some((a) => a.provider === provider && a.marketplace === marketplace);
 }

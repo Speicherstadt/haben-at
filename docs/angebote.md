@@ -32,7 +32,7 @@ Einleitung, Texte zu Positionen und Hinweis unterstützen [fett, kursiv und unte
 - optional ein **Zahlungsplan** (siehe unten)
 - optional **Anhänge**: weitere PDF-Dateien wie AGB oder eine Leistungsbeschreibung (siehe unten)
 
-**Vorschau** im Kopf zeigt das Angebot, von rechts über das Formular oder neben ihm angeheftet ([wie bei der Rechnung](rechnungen.md#vorschau)). Der Entwurf lässt sich beliebig speichern, ändern und löschen. **Entwurf als PDF** lädt ihn als PDF aus der Vorlage des festgeschriebenen Angebots, mit „ENTWURF“ über jeder Seite und statt der Nummer, ohne eine Nummer zu vergeben ([wie bei der Rechnung](rechnungen.md#entwurf-als-pdf)).
+**Vorschau** im Kopf zeigt das Angebot, von rechts über das Formular oder neben ihm angeheftet ([wie bei der Rechnung](rechnungen.md#vorschau)). Der Entwurf lässt sich beliebig speichern, ändern und löschen. **Kopieren** speichert, was noch nicht gespeichert ist, und legt daraus einen neuen Entwurf an, mit denselben Angaben wie beim Kopieren eines festgeschriebenen Angebots (unten); so lässt sich ein Entwurf als Vorlage für ähnliche Angebote aufheben, dann erst kopieren und in der Kopie ändern. **Entwurf als PDF** lädt ihn als PDF aus der Vorlage des festgeschriebenen Angebots, mit „ENTWURF“ über jeder Seite und statt der Nummer, ohne eine Nummer zu vergeben ([wie bei der Rechnung](rechnungen.md#entwurf-als-pdf)).
 
 ### Optionale und alternative Positionen
 
@@ -82,7 +82,7 @@ Mit dem Festschreiben sind die Anhänge zusammen mit dem Angebot gesperrt: Die D
 
 Gebucht wird nichts: Ein Angebot ist kein Geschäftsvorfall.
 
-Ein festgeschriebenes Angebot ändert sich nicht mehr, so wie eine Rechnung. Für eine geänderte Fassung legt **Kopieren** einen neuen Entwurf an, mit Kunde, Einleitung, Positionen (samt Art und Rabatt), Hinweis, Bestell-, Auftrags- und Lieferscheinnummer, Umsatzsteuer, Preismodus, Sprache, Gesamtrabatt, Zahlungsplan und [Anhängen](#anhänge); im neuen Entwurf lassen sich die Anhänge wieder ändern. Datum und Gültigkeit sind dabei neu, die Dauer der Gültigkeit bleibt gleich; der Leistungszeitraum bleibt leer.
+Ein festgeschriebenes Angebot ändert sich nicht mehr, so wie eine Rechnung. Für eine geänderte Fassung legt **Kopieren** einen neuen Entwurf an, mit Kunde, Ansprechpartner (solange aktiv), Einleitung, Positionen (samt Art, Text, Artikelnummer, Rabatt und Kennzeichen für § 35a EStG), Hinweis, Bestell-, Auftrags- und Lieferscheinnummer, Umsatzsteuer, Preismodus, Sprache, Gesamtrabatt, Zahlungsplan und [Anhängen](#anhänge); im neuen Entwurf lassen sich die Anhänge wieder ändern. Datum und Gültigkeit sind dabei neu, die Dauer der Gültigkeit bleibt gleich; der Leistungszeitraum bleibt leer.
 
 ## Per E-Mail senden
 
@@ -121,7 +121,7 @@ Vor dem Festschreiben passt du den Entwurf an, etwa die tatsächlich geleisteten
 
 Jedes Angebot lässt sich nur einmal abrechnen. Löschst du den Rechnungsentwurf, kannst du das Angebot wieder abrechnen. Ein abgelehntes Angebot rechnet Haben nicht ab; mit **Antwort zurücknehmen** setzt du es wieder auf offen.
 
-Eine Auftragsverwaltung oder ein eigenes Skript liest Angebote samt Antwort des Kunden und Rechnung über die [REST-API](api.md#angebote), angemeldet mit einem API-Token, das das Recht „Angebote und Entwürfe lesen“ (`angebote:lesen`) hat. Ändern kann sie dort nichts.
+Eine Auftragsverwaltung oder ein eigenes Skript liest Angebote samt Antwort des Kunden und Rechnung über die [REST-API](api.md#angebote), angemeldet mit einem API-Token, das das Recht „Angebote und Entwürfe lesen“ (`angebote:lesen`) hat. Mit dem Recht „Angebote lesen, Entwürfe anlegen, ändern und löschen“ (`angebote:entwuerfe`) legt sie auch [Entwürfe](api.md#angebotsentwürfe) an; festgeschrieben und versendet wird in Haben.
 
 ### In Abschlägen abrechnen
 
@@ -137,7 +137,7 @@ Bei größeren Aufträgen rechnest du das Angebot in Teilen ab (siehe [Abschlags
 Bei einem angenommenen Angebot stehen unter **Antwort des Kunden** zwei weitere PDFs:
 
 - **Auftragsbestätigung:** dieselben Positionen, Preise und Rabatte wie im Angebot, nach der Auswahl des Kunden bei optionalen und alternativen Positionen, datiert auf den Tag der Annahme, mit Bezug auf das Angebot, Bestell-, Auftrags- und Lieferscheinnummer und der Auftragssumme; auf Wunsch mit dem Zahlungsplan, gerechnet auf die Auftragssumme.
-- **Lieferschein:** die gewählten Positionen mit Menge und Text zur Position, ohne Preise, mit Bestell- und Auftragsnummer, mit einem Feld für die Empfangsbestätigung des Kunden. Als Lieferdatum gilt das Ende des Leistungszeitraums, sonst der Tag der Annahme.
+- **Lieferschein:** die gewählten Positionen mit Menge und Text zur Position, ohne Preise, mit Bestell- und Auftragsnummer, mit einem Feld für die Empfangsbestätigung des Kunden. Der Kopf nennt den **Leistungszeitraum**, wenn die Leistung über mehrere Tage geht, sonst als Lieferdatum den Tag der Leistung. Ohne Leistungsdatum gilt der Tag der Annahme, bei einer Rechnung der Rechnungstag.
 
 Beide entstehen bei jedem Abruf neu aus dem festgeschriebenen Angebot und buchen nichts. Positionen und Beträge bleiben gleich, solange die Antwort „angenommen“ bleibt; die Sprache folgt dem Angebot. Gestaltung, Layout, Name und Anschrift der Firma, ihre Pflichtangaben und Name und Anschrift des Kunden kommen dagegen aus dem aktuellen Stand der Einstellungen und des Kontakts, ändern sie sich, sieht auch ein erneut abgerufenes PDF anders aus (siehe [Pflichtangaben einer GmbH oder UG](rechnungen.md#pflichtangaben-einer-gmbh-oder-ug)); Bankverbindung, Steuernummer und Kundennummer bleiben wie im Angebot. Einen Lieferschein gibt es auch zu jeder festgeschriebenen Rechnung, nicht zu Storno und Korrektur (Schaltfläche **Lieferschein** auf der Rechnung). Hat das Angebot keine Einleitung oder keinen Hinweis, nimmt die Auftragsbestätigung dafür den aktuellen [Standard-Textbaustein](rechnungen.md#standard-je-belegart), der Lieferschein seinen Hinweis immer daraus, wenn es einen gibt; ändert er sich, steht auch in einem erneut abgerufenen PDF der neue Text.
 

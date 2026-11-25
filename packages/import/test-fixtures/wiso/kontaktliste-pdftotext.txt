@@ -1,0 +1,110 @@
+Unternehmen / Firma Mustermann Partnerschaft mbB Beratende Ingenieure (Max Mustermann)                                                                            Seite 1
+Art des Unternehmens Ingenieurbüro
+Steuernummer         000/0000/0000                                                                                                                  Kunden / Interessenten
+
+Kunden / Interessenten
+Name, Anschrift             Telefon              Kontaktdaten              Bankverbindung              Umsatz                                 Notizen
+0001, Muster-Haus GmbH      k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Beispielweg 1                                                                                          Kreditlimit: 0,00 €
+12345 Musterstadt                                                                                      Saldo: 0,00 €
+2. Anschrift                                                                                           Verfügbares Kreditlimit: 0,00 €
+k.A.                                                                                                   Durchschnittlich bezahlt in: k.A.
+
+0002, Musterfrau,Erika      k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Probestraße 6b                                                                                         Kreditlimit: 0,00 €
+12345 Musterstadt                                                                                      Saldo: 0,00 €
+2. Anschrift                                                                                           Verfügbares Kreditlimit: 0,00 €
+k.A.                                                                                                   Durchschnittlich bezahlt in: k.A.
+
+0003, FM Fiktivholz         k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Holzbaustatik GmbH & Co. KG                                                                            Kreditlimit: 0,00 €
+Industriestraße 27                                                                                     Saldo: 0,00 €
+54321 Beispieldorf                                                                                     Verfügbares Kreditlimit: 0,00 €
+Ansprechpartner: Frau Beispiel                                                                         Durchschnittlich bezahlt in: k.A.
+2. Anschrift
+k.A.
+
+0004, Mustermann,Hans und   k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Anna                                                                                                   Kreditlimit: 0,00 €
+Wiesenweg 12                                                                                           Saldo: 0,00 €
+67890 Testheim                                                                                         Verfügbares Kreditlimit: 0,00 €
+2. Anschrift                                                                                           Durchschnittlich bezahlt in: k.A.
+k.A.
+
+0005, Max und Maria         k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Beispiel                                                                                               Kreditlimit: 0,00 €
+Gartenstr. 4                                                                                           Saldo: 0,00 €
+67891 Teststadt                                                                                        Verfügbares Kreditlimit: 0,00 €
+2. Anschrift                                                                                           Durchschnittlich bezahlt in: k.A.
+k.A.
+
+                                                                                                    Soweit im Einzelnen nicht anders vermerkt, Betragsangaben in Euro.
+Unternehmen / Firma Mustermann Partnerschaft mbB Beratende Ingenieure (Max Mustermann)                                                                            Seite 2
+Art des Unternehmens Ingenieurbüro
+Steuernummer         000/0000/0000                                                                                                                  Kunden / Interessenten
+
+Kunden / Interessenten
+Name, Anschrift             Telefon              Kontaktdaten              Bankverbindung              Umsatz                                 Notizen
+0006, Dr. Probst GmbH       k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Universitätsstraße 99                                                                                  Kreditlimit: 0,00 €
+44444 Beispielburg                                                                                     Saldo: 0,00 €
+2. Anschrift                                                                                           Verfügbares Kreditlimit: 0,00 €
+k.A.                                                                                                   Durchschnittlich bezahlt in: k.A.
+
+0007, Beispiel Park         k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Teststadt S.à r.                                                                                       Kreditlimit: 0,00 €
+l.                                                                                                     Saldo: 0,00 €
+1b Rue d'Exemple                                                                                       Verfügbares Kreditlimit: 0,00 €
+L - 1234 Luxembourg                                                                                    Durchschnittlich bezahlt in: k.A.
+2. Anschrift
+k.A.
+
+0008, XYZ Gewerbepark       k.A.                 k.A.                      k.A.                        Umsatz (netto): 31.225,00 €            k.A.
+Beispiel-Süd GmbH & Co.                                                                                Offene Rechnungen: 1
+KG                                                                                                     Bestehende Mahnungen: 0
+Teststraße 15                                                                                          Kreditlimit: 0,00 €
+11111 Probenhausen                                                                                     Saldo: 37.157,75 €
+Ansprechpartner: Herr Probe                                                                            Verfügbares Kreditlimit: -37.157,75
+2. Anschrift                                                                                           €
+k.A.                                                                                                   Durchschnittlich bezahlt in: 11
+                                                                                                       Tagen
+
+0009, Kunde Nord GmbH       k.A.                 k.A.                      k.A.                        Umsatz (netto): 28.000,00 €            k.A.
+Nordstraße 8                                                                                           Offene Rechnungen: 0
+22222 Nordstadt                                                                                        Bestehende Mahnungen: 0
+2. Anschrift                                                                                           Kreditlimit: 0,00 €
+k.A.                                                                                                   Saldo: 0,00 €
+                                                                                                       Verfügbares Kreditlimit: -0,00
+                                                                                                       €
+                                                                                                       Durchschnittlich bezahlt in: 21
+                                                                                                       Tagen
+
+0010, Büro Beispiel &       k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Partner                                                                                                Kreditlimit: 0,00 €
+Am Markt 3                                                                                             Saldo: 0,00 €
+33333 Marktheim                                                                                        Verfügbares Kreditlimit: 0,00 €
+2. Anschrift                                                                                           Durchschnittlich bezahlt in: k.A.
+k.A.
+
+                                                                                                    Soweit im Einzelnen nicht anders vermerkt, Betragsangaben in Euro.
+Unternehmen / Firma Mustermann Partnerschaft mbB Beratende Ingenieure (Max Mustermann)                                                                            Seite 3
+Art des Unternehmens Ingenieurbüro
+Steuernummer         000/0000/0000                                                                                                                  Kunden / Interessenten
+
+Kunden / Interessenten
+Name, Anschrift             Telefon              Kontaktdaten              Bankverbindung              Umsatz                                 Notizen
+0011, Muster Logistik       k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+S.a.r.l.                                                                                               Kreditlimit: 0,00 €
+26 Boulevard d'Exemple                                                                                 Saldo: 0,00 €
+L - 1821 Luxembourg                                                                                    Verfügbares Kreditlimit: 0,00 €
+2. Anschrift                                                                                           Durchschnittlich bezahlt in: k.A.
+k.A.
+
+0012, Probe,Peter           k.A.                 k.A.                      k.A.                        Umsatz (netto): 0,00 €                 k.A.
+Lindenallee 2                                                                                          Kreditlimit: 0,00 €
+44445 Probestadt                                                                                       Saldo: 0,00 €
+2. Anschrift                                                                                           Verfügbares Kreditlimit: 0,00 €
+k.A.                                                                                                   Durchschnittlich bezahlt in: k.A.
+
+                                                                                                    Soweit im Einzelnen nicht anders vermerkt, Betragsangaben in Euro.
+

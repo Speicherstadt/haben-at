@@ -56,8 +56,8 @@ const STEUERBERATUNG_LAEDT = [
   "rechnungsanhang/$id.ts",
 ];
 
-/** API-Routen ohne Sitzung: eigene Anmeldung (Better Auth), API-Token (MCP, REST), OAuth-Client (Registrierung, Token), geheimer Link (Kalender) oder öffentlicher Healthcheck */
-const OHNE_SITZUNG = ["auth/$.ts", "fristen/kalender.ts", "health.ts", "mcp.ts", "oauth/register.ts", "oauth/token.ts", "v1/$.ts"];
+/** API-Routen ohne Sitzung: eigene Anmeldung (Better Auth), API-Token (MCP, REST), OAuth-Client (Registrierung, Token), geheimer Link (Kalender), eigenes Token (Metriken) oder öffentlicher Healthcheck */
+const OHNE_SITZUNG = ["auth/$.ts", "fristen/kalender.ts", "health.ts", "mcp.ts", "metrics.ts", "oauth/register.ts", "oauth/token.ts", "v1/$.ts"];
 
 interface ServerFn {
   id: string;

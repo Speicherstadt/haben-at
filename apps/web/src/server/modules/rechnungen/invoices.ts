@@ -105,7 +105,15 @@ export function invoiceListQuery(fields: typeof invoiceListFields, filter: SQL |
 async function selectInvoiceList(today: string, filter: SQL | undefined, q: Db | Tx = db, bis?: string) {
   // Abschlussstand (#1110): Rechnungen, die es am Stichtag noch nicht gab, stehen dort nicht, und eine erst danach
   // ausgestellte Stornorechnung hebt die Forderung nicht rückwirkend auf
-  const fields = bis ? { ...invoiceListFields, cancelled: sql<boolean>`${schema.invoices.id} in (${cancelledIdsUpTo(bis)})` } : invoiceListFields;
+  const fields = bis
+    ? {
+        ...invoiceListFields,
+        // Beim Rechnungsaustausch bleibt die Forderung auch vor Ausstellung der Ersatzrechnung bestehen.
+        cancelled: sql<boolean>`${schema.invoices.id} in (${cancelledIdsUpTo(bis)}) and not exists (
+          select 1 from invoices replacement where replacement.replaces_invoice_id = ${schema.invoices.id}
+            and replacement.variant is null and replacement.status = 'final' and replacement.issue_date > ${bis})`,
+      }
+    : invoiceListFields;
   return withListStatus(await invoiceListQuery(fields, bis ? and(filter, lte(schema.invoices.issueDate, bis)) : filter, q), today, q, bis);
 }
 

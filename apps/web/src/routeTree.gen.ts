@@ -37,6 +37,7 @@ import { Route as ApiHealthRouteImport } from './routes/api/health'
 import { Route as ApiKennzeichenRouteImport } from './routes/api/kennzeichen'
 import { Route as ApiLogoRouteImport } from './routes/api/logo'
 import { Route as ApiMcpRouteImport } from './routes/api/mcp'
+import { Route as ApiMetricsRouteImport } from './routes/api/metrics'
 import { Route as EinladungTokenRouteImport } from './routes/einladung.$token'
 import { Route as OauthAutorisierenRouteImport } from './routes/oauth/autorisieren'
 import { Route as DotwellKnownOauthProtectedResourceSplatRouteImport } from './routes/[.]well-known/oauth-protected-resource.$'
@@ -272,6 +273,11 @@ const ApiLogoRoute = ApiLogoRouteImport.update({
 const ApiMcpRoute = ApiMcpRouteImport.update({
   id: '/api/mcp',
   path: '/api/mcp',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiMetricsRoute = ApiMetricsRouteImport.update({
+  id: '/api/metrics',
+  path: '/api/metrics',
   getParentRoute: () => rootRouteImport,
 } as any)
 const EinladungTokenRoute = EinladungTokenRouteImport.update({
@@ -796,6 +802,7 @@ export interface FileRoutesByFullPath {
   '/api/kennzeichen': typeof ApiKennzeichenRoute
   '/api/logo': typeof ApiLogoRoute
   '/api/mcp': typeof ApiMcpRoute
+  '/api/metrics': typeof ApiMetricsRoute
   '/einladung/$token': typeof EinladungTokenRoute
   '/oauth/autorisieren': typeof OauthAutorisierenRoute
   '/.well-known/oauth-protected-resource/$': typeof DotwellKnownOauthProtectedResourceSplatRoute
@@ -919,6 +926,7 @@ export interface FileRoutesByTo {
   '/api/kennzeichen': typeof ApiKennzeichenRoute
   '/api/logo': typeof ApiLogoRoute
   '/api/mcp': typeof ApiMcpRoute
+  '/api/metrics': typeof ApiMetricsRoute
   '/einladung/$token': typeof EinladungTokenRoute
   '/oauth/autorisieren': typeof OauthAutorisierenRoute
   '/': typeof AppIndexRoute
@@ -1045,6 +1053,7 @@ export interface FileRoutesById {
   '/api/kennzeichen': typeof ApiKennzeichenRoute
   '/api/logo': typeof ApiLogoRoute
   '/api/mcp': typeof ApiMcpRoute
+  '/api/metrics': typeof ApiMetricsRoute
   '/einladung/$token': typeof EinladungTokenRoute
   '/oauth/autorisieren': typeof OauthAutorisierenRoute
   '/_app/': typeof AppIndexRoute
@@ -1172,6 +1181,7 @@ export interface FileRouteTypes {
     | '/api/kennzeichen'
     | '/api/logo'
     | '/api/mcp'
+    | '/api/metrics'
     | '/einladung/$token'
     | '/oauth/autorisieren'
     | '/.well-known/oauth-protected-resource/$'
@@ -1295,6 +1305,7 @@ export interface FileRouteTypes {
     | '/api/kennzeichen'
     | '/api/logo'
     | '/api/mcp'
+    | '/api/metrics'
     | '/einladung/$token'
     | '/oauth/autorisieren'
     | '/'
@@ -1420,6 +1431,7 @@ export interface FileRouteTypes {
     | '/api/kennzeichen'
     | '/api/logo'
     | '/api/mcp'
+    | '/api/metrics'
     | '/einladung/$token'
     | '/oauth/autorisieren'
     | '/_app/'
@@ -1530,6 +1542,7 @@ export interface RootRouteChildren {
   ApiKennzeichenRoute: typeof ApiKennzeichenRoute
   ApiLogoRoute: typeof ApiLogoRoute
   ApiMcpRoute: typeof ApiMcpRoute
+  ApiMetricsRoute: typeof ApiMetricsRoute
   EinladungTokenRoute: typeof EinladungTokenRoute
   OauthAutorisierenRoute: typeof OauthAutorisierenRoute
   ApiAltbelegIdRoute: typeof ApiAltbelegIdRoute
@@ -1774,6 +1787,13 @@ declare module '@tanstack/react-router' {
       path: '/api/mcp'
       fullPath: '/api/mcp'
       preLoaderRoute: typeof ApiMcpRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/metrics': {
+      id: '/api/metrics'
+      path: '/api/metrics'
+      fullPath: '/api/metrics'
+      preLoaderRoute: typeof ApiMetricsRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/einladung/$token': {
@@ -2612,6 +2632,7 @@ const rootRouteChildren: RootRouteChildren = {
   ApiKennzeichenRoute: ApiKennzeichenRoute,
   ApiLogoRoute: ApiLogoRoute,
   ApiMcpRoute: ApiMcpRoute,
+  ApiMetricsRoute: ApiMetricsRoute,
   EinladungTokenRoute: EinladungTokenRoute,
   OauthAutorisierenRoute: OauthAutorisierenRoute,
   ApiAltbelegIdRoute: ApiAltbelegIdRoute,

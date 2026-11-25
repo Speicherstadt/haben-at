@@ -9,6 +9,9 @@ export function getRouter() {
     defaultPreload: "intent",
     defaultNotFoundComponent: NichtGefunden,
     defaultErrorComponent: SeitenFehler,
+    // Jede Seite entsteht je Pfad-Parameter neu: Beim Wechsel zu einem anderen Eintrag (etwa über die Schnellsuche) gehören
+    // Formular, Meldungen und Rückfragen sonst weiter zum vorigen (#1839, #1843). Suchparameter wie ?jahr= lassen die Seite stehen
+    defaultRemountDeps: ({ params }) => params,
   });
 }
 

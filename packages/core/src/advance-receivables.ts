@@ -103,32 +103,33 @@ function position(
   };
 }
 
-function requestAt(original: DeferredInvoice, members: readonly DeferredInvoice[], settled: Cents, cutoff: string): AdvanceReceivablePosition | null {
+function requestAt(
+  original: DeferredInvoice,
+  adjustments: readonly DeferredInvoice[],
+  paper: DeferredInvoice | undefined,
+  settled: Cents,
+  cutoff: string,
+): AdvanceReceivablePosition | null {
   if (original.issueDate > cutoff) return null;
-  const gross = original.gross + members.filter((i) => i.id !== original.id && i.issueDate <= cutoff).reduce((sum, i) => sum + i.gross, 0);
+  const gross = original.gross + adjustments.reduce((sum, i) => sum + i.gross, 0);
   const open = gross - settled;
   if (!open) return null;
-  const cancellation = members.find((i) => i.kind === "storno" && i.correctsId === original.id && i.issueDate <= cutoff);
-  return position(original, open < 0 ? (cancellation ?? original) : original, open < 0 ? "refund" : "request", open < 0 ? -original.gross : gross, open);
+  const source = paper ?? original;
+  const cancellation = adjustments.find((i) => i.kind === "storno" && i.correctsId === source.id);
+  return position(original, open < 0 ? (cancellation ?? source) : source, open < 0 ? "refund" : "request", open < 0 ? -original.gross : gross, open);
 }
 
 function claimAt(
   original: DeferredInvoice,
-  members: readonly DeferredInvoice[],
+  adjustments: readonly DeferredInvoice[],
+  paper: DeferredInvoice | undefined,
   settled: Cents,
-  performed: boolean,
-  cutoff: string,
-  byId: ReadonlyMap<string, DeferredInvoice>,
+  cancelled: boolean,
 ): AdvanceReceivablePosition | null {
-  // Bei einer Anforderung bilden ihre Korrektur-/Stornozeilen den angeforderten Betrag. Ein Schluss-Papierstorno
-  // hebt dagegen weder die bereits erbrachte Leistung noch eine vorherige echte Entgeltkorrektur auf.
-  const corrections = members.filter((i) => i.id !== original.id && i.issueDate <= cutoff && (original.variant !== "schluss" || i.kind === "korrektur"));
-  const gross = performed ? original.gross + corrections.reduce((sum, i) => sum + i.gross, 0) : 0;
+  const gross = original.gross + adjustments.reduce((sum, i) => sum + i.gross, 0);
   const open = gross - settled;
   if (!open) return null;
-  const paper = paperAt(members, cutoff, byId);
-  const cancelled = paper && members.some((i) => i.kind === "storno" && i.correctsId === paper.id && i.issueDate <= cutoff);
-  const kind = original.variant === null && open < 0 ? "refund" : performed && (!paper || cancelled) ? "unbilled" : "receivable";
+  const kind = original.variant === null && open < 0 ? "refund" : !paper || cancelled ? "unbilled" : "receivable";
   return position(original, paper, kind, gross, open);
 }
 
@@ -152,6 +153,13 @@ export function advanceReceivables(
     const members = invoices.filter((i) => origins.get(i.id) === original.id);
     const paid = payments.filter((s) => origins.get(s.invoiceId) === original.id);
     const settled = paid.reduce((sum, s) => sum + s.amount, 0);
+    const paper = paperAt(members, cutoff, byId);
+    const dated = members.filter((i) => i.id !== original.id && i.issueDate <= cutoff);
+    // Ein festgeschriebener Ersatz belegt, dass der Anspruch auch zwischen Storno und Ersatz bestehen blieb (#1454).
+    // Nur Nummer und Fälligkeit richten sich weiter nach dem Beleg am Stichtag.
+    const replaced = new Set(members.map((i) => i.replacesInvoiceId).filter((id) => id !== null));
+    const adjustments = original.variant === null ? dated.filter((i) => !i.replacesInvoiceId && !(i.kind === "storno" && replaced.has(i.correctsId!))) : dated;
+    const cancellation = dated.find((i) => i.kind === "storno" && i.correctsId === (paper?.id ?? original.id));
     const isAdvance = original.advanceType === "anzahlung";
     const performed = isAdvance
       ? deductions.some(
@@ -162,9 +170,11 @@ export function advanceReceivables(
             byId.get(d.invoiceId)!.performanceDate <= cutoff,
         )
       : original.performanceDate <= cutoff &&
-        !(original.variant === null && members.some((i) => i.kind === "storno" && i.correctsId === original.id && i.issueDate <= original.performanceDate));
+        !(original.variant === null && cancellation && !replaced.has(cancellation.correctsId!) && cancellation.issueDate <= original.performanceDate);
     if (!performed) result.netAdvances += paid.filter((s) => s.kind === "payment").reduce((sum, s) => sum + s.net, 0);
-    const row = !performed ? requestAt(original, members, settled, cutoff) : claimAt(original, members, settled, performed, cutoff, byId);
+    const row = performed
+      ? claimAt(original, original.variant === "schluss" ? dated.filter((i) => i.kind === "korrektur") : adjustments, paper, settled, !!cancellation)
+      : requestAt(original, adjustments, original.variant === null ? paper : undefined, settled, cutoff);
     if (!row) continue;
     result.positions.push(row);
     if (row.kind === "request") result.requests += row.open;

@@ -154,6 +154,7 @@ export function documentFor(
     ...(invoice.propertyRetention ? { propertyRetention: true } : {}),
     ...documentReferences(invoice),
     ...(invoice.taxTreatment !== "regulaer" ? { taxTreatment: invoice.taxTreatment } : {}),
+    ...(invoice.taxDetails?.foreignPlace ? { foreignPlace: invoice.taxDetails.foreignPlace } : {}),
     ...(invoice.exemptionReason ? { exemptionReason: invoice.exemptionReason } : {}),
     ...(invoice.priceMode === "brutto" ? { priceMode: invoice.priceMode } : {}),
     language: invoice.language,

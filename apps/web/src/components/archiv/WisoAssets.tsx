@@ -1,62 +1,26 @@
 import { formatEuro } from "@haben/core";
 import { Link } from "@tanstack/react-router";
 import { useServerFn } from "@tanstack/react-start";
-import { useState, type FormEvent } from "react";
 import { saveBase64File } from "../../lib/download.ts";
-import { useAction } from "../../lib/use-action.ts";
-import { useSubmitCheck } from "../../lib/use-submit-check.ts";
-import { previewWisoAssetsFn } from "../../server/functions/wiso-assets.ts";
-import { Field } from "../Field.tsx";
-import { FilePicker } from "../FilePicker.tsx";
-import { NoticeBanner } from "../NoticeBanner.tsx";
+import { previewWisoAssetsFn } from "../../server/functions/wiso-pdf.ts";
 import { ScrollBox } from "../ScrollTable.tsx";
+import { WisoPdfPreview, WisoWarnings } from "./WisoPdfPreview.tsx";
 
 type Preview = Awaited<ReturnType<typeof previewWisoAssetsFn>>;
 
 export function WisoAssets() {
-  const previewFn = useServerFn(previewWisoAssetsFn);
-  const action = useAction();
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<Preview | null>(null);
-  const submit = useSubmitCheck({ file: file ? null : "Bitte ein WISO-Anlagenverzeichnis auswählen." });
-  function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    if (!submit.check() || !file) return;
-    const data = new FormData();
-    data.append("file", file);
-    void action.run(async () => {
-      setPreview(null);
-      setPreview(await previewFn({ data }));
-    });
-  }
+  const read = useServerFn(previewWisoAssetsFn);
   return (
-    <section className="card stack" aria-labelledby="wiso-assets-heading">
-      <h2 id="wiso-assets-heading">WISO-Anlagenverzeichnis als PDF prüfen</h2>
-      <form ref={submit.form} className="stack" noValidate onSubmit={onSubmit}>
-        <Field label="WISO-Anlagenverzeichnis" hint="PDF mit Textebene, höchstens 20 MB und 100 Seiten." error={submit.error("file")}>
-          {(control) => (
-            <FilePicker
-              {...control}
-              accept=".pdf,application/pdf"
-              disabled={action.busy}
-              required
-              onChange={(event) => {
-                setFile(event.target.files?.[0] ?? null);
-                setPreview(null);
-                action.setNotice(null);
-              }}
-            />
-          )}
-        </Field>
-        <div className="actions">
-          <button type="submit" className="btn" disabled={action.busy}>
-            {action.busy ? "Lese PDF …" : "Anlagen prüfen"}
-          </button>
-        </div>
-      </form>
-      <NoticeBanner notice={action.notice} />
-      {preview && <WisoAssetResult preview={preview} />}
-    </section>
+    <WisoPdfPreview
+      id="wiso-assets"
+      title="WISO-Anlagenverzeichnis als PDF prüfen"
+      label="WISO-Anlagenverzeichnis"
+      missing="Bitte ein WISO-Anlagenverzeichnis auswählen."
+      submitLabel="Anlagen prüfen"
+      read={read}
+    >
+      {(preview) => <WisoAssetResult preview={preview} />}
+    </WisoPdfPreview>
   );
 }
 
@@ -67,15 +31,7 @@ function WisoAssetResult({ preview }: { preview: Preview }) {
         {preview.assets.length} {preview.assets.length === 1 ? "Anlage" : "Anlagen"} für {preview.year} erkannt. Übernahmestichtag für diese Werte: 01.01.
         {preview.year + 1}.
       </p>
-      {preview.warnings.length > 0 && (
-        <ul className="upload-messages">
-          {preview.warnings.map((warning) => (
-            <li className="banner banner-warn" key={warning}>
-              {warning}
-            </li>
-          ))}
-        </ul>
-      )}
+      <WisoWarnings warnings={preview.warnings} />
       <ScrollBox label="Erkannte WISO-Anlagen">
         <table className="data-table" aria-label="Erkannte WISO-Anlagen">
           <thead>

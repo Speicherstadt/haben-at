@@ -1,5 +1,6 @@
 // Geldtransit zwischen eigenen Konten und Auszahlungen der Zahlungsdienstleister
 import { insertAllocation } from "./settlement-store.ts";
+import { reassignmentSource } from "./allocation-reassignment.ts";
 import { BankError } from "./bank-error.ts";
 import { providerMatcher, type ProviderMatcher, directPosting, findTransferCounterpart, payoutKey, aufKontoAngeboten } from "@haben/core";
 import { and, asc, eq, inArray, sql } from "drizzle-orm";
@@ -144,9 +145,16 @@ export async function allocateTransferIn(tx: Tx, input: z.infer<typeof transferS
       }
     }
     for (const bank of rows) {
-      const [allocation] = await insertAllocation(tx, { transactionId: bank.id, kind: "geldtransit", amount: bank.amount });
+      const source = await reassignmentSource(tx, bank.id, bank.amount);
+      const [allocation] = await insertAllocation(tx, {
+        transactionId: bank.id,
+        kind: "geldtransit",
+        amount: bank.amount,
+        date: source?.date,
+        reassignsId: source?.id,
+      });
       await post(tx, company, {
-        date: bank.bookingDate,
+        date: source?.date ?? bank.bookingDate,
         description: `${bank.counterpartyName || "Bankumsatz"} · geldtransit`,
         sourceType: "allocation",
         sourceId: allocation!.id,

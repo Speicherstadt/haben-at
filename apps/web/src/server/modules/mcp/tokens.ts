@@ -31,6 +31,7 @@ export const TOKEN_SCOPES = [
   "rechnungen:entwuerfe",
   "rechnungen:vorlagen-anlegen",
   "angebote:lesen",
+  "angebote:entwuerfe",
   "belege:lesen",
   "belege:anlegen",
   "artikel:lesen",
@@ -50,6 +51,7 @@ export const TOKEN_SCOPE_LABELS: Record<TokenScope, string> = {
   "rechnungen:entwuerfe": "API: Rechnungen lesen, Entwürfe anlegen, ändern und löschen",
   "rechnungen:vorlagen-anlegen": "API: Vorlagen für wiederkehrende Rechnungen anlegen",
   "angebote:lesen": "API: Angebote und Entwürfe lesen",
+  "angebote:entwuerfe": "API: Angebote lesen, Entwürfe anlegen, ändern und löschen",
   "belege:lesen": "API: Belege lesen",
   "belege:anlegen": "API: Belege lesen und hochladen (landen als „Zu prüfen“)",
   "artikel:lesen": "API: Katalogartikel lesen",
@@ -63,6 +65,7 @@ export const TOKEN_SCOPE_LABELS: Record<TokenScope, string> = {
 const IMPLIED: Partial<Record<TokenScope, TokenScope>> = {
   "kontakte:schreiben": "kontakte:lesen",
   "rechnungen:entwuerfe": "rechnungen:lesen",
+  "angebote:entwuerfe": "angebote:lesen",
   "belege:anlegen": "belege:lesen",
   "artikel:schreiben": "artikel:lesen",
   "leistungen:schreiben": "leistungen:lesen",

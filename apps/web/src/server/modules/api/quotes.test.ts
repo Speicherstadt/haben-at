@@ -3,8 +3,8 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from "vitest";
 import { leeren, setupTestDb, testDatabaseUrl } from "../../test-db.ts";
 
 /*
- * REST-API für Angebote (#297): nur lesen, mit eigenem Recht angebote:lesen. Festgeschrieben, versendet und abgerechnet
- * wird in Haben; die API zeigt den Stand.
+ * REST-API für Angebote (#297): lesen, mit eigenem Recht angebote:lesen; Entwürfe anlegen, ändern und löschen in
+ * quote-drafts.test.ts. Festgeschrieben, versendet und abgerechnet wird in Haben; die API zeigt den Stand.
  */
 
 describe.skipIf(!testDatabaseUrl)("REST-API /api/v1/angebote (Postgres, #297)", () => {

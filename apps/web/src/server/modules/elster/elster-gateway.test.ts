@@ -116,8 +116,39 @@ describe.skipIf(!testDatabaseUrl)("ELSTER-Gateway (Postgres)", () => {
       console.error = original;
     }
     expect(errors).toHaveLength(1);
-    expect(errors[0]?.[1]).toEqual({ transferTicket: "tt-1", requestXml: "<xml/>" });
+    // Transferticket und XML als Felder, der Fehler darin (log.ts)
+    expect(errors[0]?.[1]).toMatchObject({ transferTicket: "tt-1", requestXml: "<xml/>", error: expect.any(Error) });
   });
+  it("zählt die Antworten von ERiC für /api/metrics nach Vorgang und Ergebnis, eine fehlende PIN nicht", async () => {
+    const metriken = await import("../../metriken.ts");
+    metriken.resetMetrics();
+    const zaehler = () => metriken.metricsText({ version: null, commit: null, up: true }).match(/^haben_elster_submissions_total\{.*$/gm);
+    const u = (vorgang: "validate" | "test") => ({
+      sperre: "haben.test.metriken",
+      vorgang,
+      herstellerId: undefined,
+      vorbereiten: async () => ({ xml: "<xml/>", daten: null }),
+      protokollieren: async () => {},
+    });
+    const geprueft: ElsterResult = { ok: true, code: 0, message: "ok", responseXml: "", serverResponseXml: "" };
+    await gateway.uebermitteln({ ...liveClient(), validate: async () => geprueft }, u("validate"));
+    const abgelehnt = liveClient([], { answer: { ok: false, message: "Plausibilitätsfehler" } });
+    await certificate("1234");
+    await gateway.uebermitteln(abgelehnt, { ...u("test"), pin: "1234" });
+    const absturz = { ...liveClient(), send: async () => Promise.reject(new Error("Worker beendet")) };
+    await expect(gateway.uebermitteln(absturz, { ...u("test"), pin: "1234" })).rejects.toThrow("Worker beendet");
+    // Ohne PIN fragt Haben ERiC gar nicht
+    await expect(gateway.uebermitteln(liveClient(), u("test"))).rejects.toThrow("Die Zertifikats-PIN fehlt.");
+    expect(zaehler()).toEqual([
+      'haben_elster_submissions_total{kind="validate",result="ok"} 1',
+      'haben_elster_submissions_total{kind="validate",result="error"} 0',
+      'haben_elster_submissions_total{kind="test",result="ok"} 0',
+      'haben_elster_submissions_total{kind="test",result="error"} 2',
+      'haben_elster_submissions_total{kind="send",result="ok"} 0',
+      'haben_elster_submissions_total{kind="send",result="error"} 0',
+    ]);
+  });
+
   const certificate = (pin?: string) =>
     sql`insert into elster_certificates (filename, ciphertext, pin_ciphertext)
       values ('test.pfx', ${crypto.encrypt(new Uint8Array([7, 7]))}, ${pin ? crypto.encrypt(new TextEncoder().encode(pin)) : null})`;

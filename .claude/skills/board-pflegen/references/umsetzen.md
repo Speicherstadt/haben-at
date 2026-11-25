@@ -26,3 +26,18 @@ gh api graphql -f query='mutation($p:ID!,$i:ID!,$a:ID){updateProjectV2ItemPositi
 ```
 
 Der Workflow „Item added to project“ setzt bei neuen Karten selbst einen Status, manchmal kurz nach dem eigenen Aufruf: Status zum Schluss noch einmal auslesen und bei Abweichung neu setzen. Nach Zuweisungen ebenso prüfen, dass die Karte in „In Arbeit“ steht.
+
+## Archivieren
+
+Nach einer fertigen Version, nach OK: Karten in „Erledigt“, deren Issue vor diesem Release geschlossen wurde. Sonst liest jeder Lauf die ganze Historie mit, und das Limit der GraphQL-Schnittstelle ist schnell erschöpft. Vorher `gh project item-list` als Datei sichern. Nicht löschen: Archivierte Karten behalten Status und Felder.
+
+| Schritt | Befehl |
+| --- | --- |
+| Archivieren | `gh project item-archive 3 --owner Speicherstadt --id <item>` |
+| Zurückholen | `gh project item-archive 3 --owner Speicherstadt --id <item> --undo` |
+
+`gh project item-list` zeigt archivierte Karten nicht. Die Karte eines wieder geöffneten Issues steht am Issue:
+
+```sh
+gh api graphql -f query='query($n:Int!){repository(owner:"Speicherstadt",name:"haben"){issue(number:$n){projectItems(first:20){nodes{id isArchived project{number}}}}}}' -F n=<n>
+```

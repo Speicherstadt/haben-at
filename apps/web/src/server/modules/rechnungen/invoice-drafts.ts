@@ -21,6 +21,7 @@ import { attachmentFiles, removeFiles, unusedFiles } from "./attachments.ts";
 import { draftRate, MAX_EURO_CENTS } from "./draft-rate.ts";
 import { effectivePriceMode, type DraftInput, type LineInput } from "./draft-schema.ts";
 import { InvoiceError } from "./invoice-error.ts";
+import { replacementQuote } from "./invoice-replacement.ts";
 import { euroTaxes, storeInvoiceTaxes } from "./invoice-taxes.ts";
 import type { Invoice, InvoiceLine } from "./invoices.ts";
 import { draftMandateProblem, paymentColumns } from "./lastschrift.ts";
@@ -148,12 +149,23 @@ export async function createDraft(actor: string, input: DraftInput, extra: Draft
   });
 }
 
+/** Abschlags-, Korrektur- und Ersatzbezüge im Anschluss an die Angebote sperren. */
+async function lockDraftReferences(tx: Tx, input: DraftInput, draftId: string | null, kind: Invoice["kind"], correctsId?: string | null) {
+  // Angebot zuerst, Bezüge vor dem Audit-Eintrag sperren. Sonst wartet eine parallele Zahlung auf die Kette.
+  const references = [...(input.deducts ?? []), correctsId, input.replacesInvoiceId].filter((id): id is string => Boolean(id));
+  let quoteId = input.quoteId;
+  for (const id of [...new Set(references)].sort()) {
+    const original = await lockInvoice(tx, id);
+    if (id === input.replacesInvoiceId) quoteId = replacementQuote(original, draftId, kind, input.variant ?? null, quoteId);
+  }
+  return quoteId;
+}
+
 /** Legt einen Entwurf in einer laufenden Transaktion an, z. B. zusammen mit dem Festschreiben (Storno) */
-export async function insertDraft(tx: Tx, input: DraftInput, extra: DraftExtra = {}): Promise<Invoice> {
-  await lockQuotes(tx, input.quoteId ? [input.quoteId] : []);
-  // Vor dem ersten Audit-Eintrag sperren: Der Fremdschlüssel der Abzugsposition braucht sonst erst danach den
-  // Abschlag, während dessen parallele Zahlung auf die Audit-Kette wartet.
-  for (const id of [...new Set([...(input.deducts ?? []), ...(extra.correctsId ? [extra.correctsId] : [])])].sort()) await lockInvoice(tx, id);
+export async function insertDraft(tx: Tx, draft: DraftInput, extra: DraftExtra = {}): Promise<Invoice> {
+  await lockQuotes(tx, await quotesTouching(tx, [draft.replacesInvoiceId], [draft.quoteId]));
+  const quoteId = await lockDraftReferences(tx, draft, null, extra.kind ?? "rechnung", extra.correctsId);
+  const input = { ...draft, quoteId };
   const { bundesland } = await loadCompany(tx);
   await checkQuote(tx, input.quoteId);
   const lines = await allLines(tx, null, input);
@@ -164,7 +176,7 @@ export async function insertDraft(tx: Tx, input: DraftInput, extra: DraftExtra =
   if (personProblem) throw new InvoiceError(personProblem);
   const [invoice] = await tx
     .insert(schema.invoices)
-    .values({ ...values, ...extra })
+    .values({ ...values, ...extra, replacesInvoiceId: input.replacesInvoiceId ?? null })
     .returning();
   await storeLines(tx, invoice!.id, lines, calculation, taxes);
   await syncQuoteBilling(tx, [invoice!.quoteId]);
@@ -179,18 +191,20 @@ export async function lockDraft(tx: Tx, id: string): Promise<Invoice> {
   return invoice;
 }
 
-export async function updateDraft(actor: string, id: string, input: DraftInput) {
+export async function updateDraft(actor: string, id: string, proposed: DraftInput) {
   return withActor(actor, async (tx) => {
-    const quoteIds = await lockQuotes(tx, await quotesTouching(tx, [id], [input.quoteId]));
+    const quoteIds = await lockQuotes(tx, await quotesTouching(tx, [id, proposed.replacesInvoiceId], [proposed.quoteId]));
     const draft = await lockDraft(tx, id);
-    for (const reference of [...new Set(input.deducts ?? [])].sort()) await lockInvoice(tx, reference);
+    const replacesInvoiceId = proposed.replacesInvoiceId === undefined ? draft.replacesInvoiceId : proposed.replacesInvoiceId;
+    await assertQuotesLocked(tx, quoteIds, [id, replacesInvoiceId], [proposed.quoteId]);
+    const quoteId = await lockDraftReferences(tx, { ...proposed, replacesInvoiceId }, id, draft.kind);
+    const input = { ...proposed, quoteId, replacesInvoiceId };
     // Nur ein neuer Kunde wird geprüft: ein Kontakt, der inzwischen kein Kunde mehr ist, bleibt an der Rechnung
     if (input.contactId !== draft.contactId) {
       const entriesProblem = await customerChangeProblem(tx, id, input.contactId);
       if (entriesProblem) throw new InvoiceError(entriesProblem);
       await assertCustomer(tx, input.contactId);
     }
-    await assertQuotesLocked(tx, quoteIds, [id], [input.quoteId]);
     const { bundesland } = await loadCompany(tx);
     if (draft.kind === "rechnung") await checkQuote(tx, input.quoteId);
     const lines = draft.kind === "rechnung" ? await allLines(tx, id, input) : [...input.lines, ...(await keptDeductions(tx, id))];
@@ -214,7 +228,7 @@ export async function updateDraft(actor: string, id: string, input: DraftInput) 
     const keepsPlanRow = values.variant === "abschlag" && values.quoteId === draft.quoteId;
     const [updated] = await tx
       .update(schema.invoices)
-      .set({ ...values, ...(keepsPlanRow ? {} : { paymentPlanRow: null }) })
+      .set({ ...values, replacesInvoiceId, ...(keepsPlanRow ? {} : { paymentPlanRow: null }) })
       .where(eq(schema.invoices.id, id))
       .returning();
     await storeLines(tx, id, lines, calculation, taxes);

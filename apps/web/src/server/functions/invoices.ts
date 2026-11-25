@@ -2,7 +2,7 @@ import { inCents, previousMonthKey } from "@haben/core";
 import { notFound } from "@tanstack/react-router";
 import { invoicesSentByMail, leistungsmonatHinweisFuer, listInvoiceAttachments, mailsForInvoice } from "../modules/rechnungen/index.ts";
 import { createServerFn } from "@tanstack/react-start";
-import { asc, eq, or } from "drizzle-orm";
+import { and, asc, eq, isNull, or } from "drizzle-orm";
 import { z } from "zod";
 import { invoicePaymentList, listAccounts, listWriteOffs } from "../modules/bank/index.ts";
 import { kleinunternehmerStand, openPositions, umsatzImMonat } from "../modules/auswertungen/index.ts";
@@ -137,6 +137,21 @@ export const getNewInvoice = createServerFn({ method: "GET" })
   .middleware([authMiddleware])
   .handler(async () => ({ draft: await newDraftDefaults(today()), ...(await invoiceEditorContext()) }));
 
+/** Bezüge für den Rechnungsaustausch im Editor und am festgeschriebenen Beleg. */
+async function replacementReferences({ invoice, correctedBy }: NonNullable<Awaited<ReturnType<typeof getInvoice>>>) {
+  if (invoice.kind !== "rechnung" || invoice.variant !== null) return { replaces: null, replacedBy: null };
+  const { id, number, replacesInvoiceId, status, kind, variant } = schema.invoices;
+  const [replaces] = invoice.replacesInvoiceId ? await db.select({ id, number }).from(schema.invoices).where(eq(id, invoice.replacesInvoiceId)).limit(1) : [];
+  const [replacedBy] = correctedBy.some((row) => row.kind === "storno" && row.status === "final")
+    ? await db
+        .select({ id, number })
+        .from(schema.invoices)
+        .where(and(eq(replacesInvoiceId, invoice.id), eq(status, "final"), eq(kind, "rechnung"), isNull(variant)))
+        .limit(1)
+    : [];
+  return { replaces: replaces ?? null, replacedBy: replacedBy ?? null };
+}
+
 export const getInvoiceDetail = createServerFn({ method: "GET" })
   .middleware([readMiddleware])
   .validator(detailId)
@@ -151,6 +166,7 @@ export const getInvoiceDetail = createServerFn({ method: "GET" })
     return {
       ...result,
       invoice: withoutFiles(result.invoice),
+      ...(await replacementReferences(result)),
       issues,
       leistungsmonat,
       attachments: (await listInvoiceAttachments(data)).map(({ id, filename, size }) => ({ id, filename, size })),
@@ -284,6 +300,14 @@ export const copyInvoiceAsDraft = createServerFn({ method: "POST" })
   .validator(z.uuid())
   .handler(async ({ data, context }) => {
     const draft = await copyInvoice(context.user.id, data, today());
+    return { id: draft.id };
+  });
+
+export const copyInvoiceAsReplacementDraft = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.uuid())
+  .handler(async ({ data, context }) => {
+    const draft = await copyInvoice(context.user.id, data, today(), { replacement: true });
     return { id: draft.id };
   });
 

@@ -22,6 +22,14 @@ spec:
       ports:
         - port: 3000
           protocol: TCP
+    {{- with .Values.networkPolicy.metricsFrom }}
+    # Prometheus für /api/metrics; der Endpunkt verlangt sein eigenes Token (HABEN_METRICS_TOKEN)
+    - from:
+        {{- toYaml . | nindent 8 }}
+      ports:
+        - port: 3000
+          protocol: TCP
+    {{- end }}
 {{- if .Values.postgresql.enabled }}
 ---
 # An die Datenbank kommen nur die App mit dem Backup und der Pod zum Wiederherstellen dieser Installation

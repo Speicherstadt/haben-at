@@ -130,6 +130,41 @@ describe.skipIf(!testDatabaseUrl)("Neues Anzahlungsverfahren zum historischen St
     expect(await sql`select * from haben_integrity_problems(100)`).toEqual([]);
   });
 
+  it("übernimmt Zahlungen und offenen Posten erst im festgeschriebenen normalen Ersatz", async () => {
+    const draftInput = {
+      contactId,
+      serviceFrom: "2026-01-20",
+      serviceTo: null,
+      paymentTermDays: 14,
+      format: "zugferd" as const,
+      note: "",
+      lines: [{ description: "Beratung", quantity: 1000, unit: "Psch.", unitPrice: 100_000, taxRate: 1900 as const }],
+    };
+    const originalDraft = await invoices.createDraft(actor, { ...draftInput, issueDate: "2026-01-20" });
+    const original = await invoices.finalizeInvoice(actor, originalDraft.id, kleinunternehmerStand);
+    const part = await bank.createCashInvoiceEntry(actor, { invoiceId: original.id, date: "2026-01-25", amount: 11_900 }, "2026-04-20");
+    const storno = await invoices.cancelInvoice(actor, original.id, "2026-02-12");
+    const ersatzDraft = await invoices.createDraft(actor, { ...draftInput, issueDate: "2026-03-12", replacesInvoiceId: original.id });
+    expect(await invoices.listInvoices("2026-03-12", storno.id)).toMatchObject([{ id: storno.id, open: -11_900 }]);
+
+    const ersatz = await invoices.finalizeInvoice(actor, ersatzDraft.id, kleinunternehmerStand);
+    expect(await invoices.listInvoices("2026-03-12", storno.id)).toMatchObject([{ id: storno.id, open: 0 }]);
+    expect(await invoices.listInvoices("2026-03-12", storno.id, undefined, "2026-03-11")).toMatchObject([{ id: storno.id, open: 0 }]);
+    expect((await reader("2026-02-28")).positions).toMatchObject([{ id: original.id, open: 107_100, kind: "unbilled" }]);
+    expect(await invoices.listInvoices("2026-03-12", ersatz.id)).toMatchObject([{ id: ersatz.id, paid: 11_900, open: 107_100 }]);
+    expect((await bank.openItems()).map(({ id, open }) => ({ id, open }))).toEqual([{ id: ersatz.id, open: 107_100 }]);
+    expect((await reader("2026-03-31")).positions).toMatchObject([{ id: ersatz.id, originId: original.id, open: 107_100, kind: "receivable" }]);
+
+    const rest = await bank.createCashInvoiceEntry(actor, { invoiceId: ersatz.id, date: "2026-04-20", amount: 107_100 }, "2026-04-20");
+    expect((await bank.invoicePaymentList(original.id)).map(({ id }) => id)).toEqual([part.id]);
+    expect((await bank.invoicePaymentList(ersatz.id)).map(({ id }) => id)).toEqual([part.id, rest.id]);
+    expect(await sql`select id, invoice_id from cash_entries order by date`).toEqual([
+      { id: part.id, invoice_id: original.id },
+      { id: rest.id, invoice_id: ersatz.id },
+    ]);
+    expect((await reader("2026-04-30")).positions).toEqual([]);
+  }, 30_000);
+
   it.each([
     ["SKR03", "soll"],
     ["SKR04", "ist"],

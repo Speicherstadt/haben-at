@@ -1,16 +1,19 @@
 import { expect, type Page, test } from "@playwright/test";
+import postgres from "postgres";
 import { currentDay, day, firstLink, YEAR } from "./daten.ts";
-import type { Durchlauf } from "./durchlaeufe.ts";
+import { type Durchlauf, databaseUrlFuer } from "./durchlaeufe.ts";
 import { statusBleibtSichtbar } from "./kopfzeile.ts";
-import { axeVerstoesse, bestaetigen, durchlaufSeite, gehe, kundeWaehlen, ohneAxeVerstoesse, rechnungFestschreiben } from "./einrichtung.ts";
+import { axeVerstoesse, bestaetigen, durchlaufSeite, gehe, kundeWaehlen, ohneAxeVerstoesse, rechnungFestschreiben, ueberSchnellsuche } from "./einrichtung.ts";
 import { abzugEinspielen } from "./abzug.ts";
+import { sondergebietePruefen, sondergebietsLeistungsortPruefen } from "./sondergebiete.ts";
 import { eingabeNachAktion, fokusNachFehlschlag, kurzNacheinanderSpeichern } from "./felder-sperre.ts";
 
 /**
  * Abschnitt von rechnungen (#1742) mit eigenem Server und eigener Datenbank, parallel zu den anderen Abschnitten:
  * Angebote bis zur Abschlags- und Schlussrechnung, Versand per E-Mail mit Anhängen, Leistungen und ihre Abrechnung,
  * Verrechnung, „Bereits bezahlt“, Festschreiben nach dem Speichern, gesperrte Felder beim Speichern (auch der
- * wiederkehrenden Rechnung), Artikel-API, Kopieren und Zeiteinträge auf der Kontaktseite.
+ * wiederkehrenden Rechnung), Artikel-API, Kopieren und Zeiteinträge auf der Kontaktseite und umsatzsteuerliche
+ * Sondergebiete.
  * Beginnt mit dem Abzug nach der Einrichtung mit drei Kunden und einer festgeschriebenen Rechnung in rechnungen.spec.ts
  * (e2e/abzug.ts).
  */
@@ -771,6 +774,71 @@ test("Angebotsentwurf: Kurz nacheinander gespeichert, baut sich der Editor jedes
   await kurzNacheinanderImEntwurf("angebote");
 });
 
+/**
+ * Zwei Entwürfe für zwei neue Kunden; am zweiten bleibt „Entwurf gespeichert.“ nach dem Speichern stehen, nach dem Wechsel
+ * ohne Neuladen über die Schnellsuche zum ersten nicht mehr (#1843). Danach beide Entwürfe wieder gelöscht.
+ */
+async function meldungBeimWechsel(bereich: "rechnungen" | "angebote") {
+  const art = bereich === "rechnungen" ? "Rechnungsentwurf" : "Angebotsentwurf";
+  const kunden = [`Meldekunde ${art} Ost · Rostock`, `Meldekunde ${art} West · Aachen`] as const;
+  const name = (kunde: string) => kunde.split(" · ")[0]!;
+  // Der Entwurf, nicht der Kontakt mit demselben Namen
+  const treffer = (kunde: string) => new RegExp(`${art}\\s*${name(kunde)}`);
+  const speichern = page.getByRole("button", { name: "Entwurf speichern", exact: true });
+  const loeschen = page.getByRole("button", { name: "Entwurf löschen", exact: true });
+  const gespeichert = page.getByRole("status").filter({ hasText: "Entwurf gespeichert." });
+  const sql = postgres(databaseUrlFuer(DURCHLAUF), { max: 1 });
+  try {
+    await sql.begin(async (tx) => {
+      await tx`select set_config('haben.actor', 'e2e', true)`;
+      await tx`insert into contacts (name, ort, land, is_customer, is_supplier)
+        values (${name(kunden[0])}, 'Rostock', 'DE', true, false), (${name(kunden[1])}, 'Aachen', 'DE', true, false)`;
+    });
+    for (const kunde of kunden) {
+      await go(`/${bereich}/neu`);
+      await kundeWaehlen(page, kunde);
+      await page.getByLabel("Beschreibung Position 1").fill("Beratung");
+      await page.getByLabel("Menge Position 1").fill("1");
+      await page.getByLabel(/Einzelpreis Position 1/).fill("100,00");
+      await speichern.click();
+      // „Entwurf löschen“ gibt es erst im Editor des gespeicherten Entwurfs
+      await expect(loeschen).toBeVisible();
+    }
+    // Derselbe Entwurf geändert und gespeichert: Die Meldung bleibt, auch über den Neuaufbau des Editors
+    await page.getByLabel("Beschreibung Position 1").fill("Beratung, zweiter Stand");
+    await speichern.click();
+    await expect(gespeichert).toBeVisible();
+
+    await ueberSchnellsuche(page, name(kunden[0]), treffer(kunden[0]));
+    await expect(page.getByRole("combobox", { name: "Kunde", exact: true })).toHaveValue(kunden[0]);
+    await expect(gespeichert).toHaveCount(0);
+
+    // Nicht festschreiben: die Nummern der übrigen Tests bleiben, wie sie sind
+    await loeschen.click();
+    await bestaetigen(page, "Entwurf löschen");
+    await expect(page).toHaveURL(new RegExp(`/${bereich}(?:\\?.*)?$`));
+    await ueberSchnellsuche(page, name(kunden[1]), treffer(kunden[1]));
+    await loeschen.click();
+    await bestaetigen(page, "Entwurf löschen");
+    await expect(page).toHaveURL(new RegExp(`/${bereich}(?:\\?.*)?$`));
+  } finally {
+    // Nicht in den Zahlen der folgenden Tests
+    await sql.begin(async (tx) => {
+      await tx`select set_config('haben.actor', 'e2e', true)`;
+      await tx`update contacts set archived_at = now() where name in ${sql([name(kunden[0]), name(kunden[1])])}`;
+    });
+    await sql.end();
+  }
+}
+
+test("Rechnungsentwurf: Beim Wechsel ohne Neuladen bleibt die Meldung des vorigen Entwurfs nicht stehen (#1843)", async () => {
+  await meldungBeimWechsel("rechnungen");
+});
+
+test("Angebotsentwurf: Beim Wechsel ohne Neuladen bleibt die Meldung des vorigen Entwurfs nicht stehen (#1843)", async () => {
+  await meldungBeimWechsel("angebote");
+});
+
 test("Speichern schlägt fehl: der Fokus steht danach wieder im Feld, aus dem gespeichert wurde (#1148)", async () => {
   await go("/rechnungen/neu");
   await kundeWaehlen(page);
@@ -953,6 +1021,30 @@ test("Kopieren: festgeschriebene Rechnung und daraus wieder der Entwurf als neue
   await expect(page.getByText(/Festgeschrieben/).first()).toBeVisible();
 });
 
+test("Angebotsentwurf kopieren: die Kopie hat Positionen und Ungespeichertes, der Entwurf bleibt als Vorlage (#1881)", async () => {
+  await go("/angebote/neu");
+  // Kopieren prüft vorher die Angaben wie beim Rechnungsentwurf, auch den Kunden
+  await kundeWaehlen(page);
+  await page.getByLabel("Beschreibung Position 1").fill("Wartungspaket");
+  await page.getByLabel("Menge Position 1").fill("40");
+  await page.getByLabel(/Einzelpreis Position 1/).fill("12,50");
+  // Ein noch nie gespeichertes Angebot hat nichts zum Kopieren
+  await expect(page.getByRole("button", { name: "Kopieren", exact: true })).toHaveCount(0);
+  await page.getByRole("button", { name: "Entwurf speichern" }).click();
+  await page.waitForURL(/angebote\/[0-9a-f-]{36}$/);
+  await page.waitForLoadState("networkidle");
+
+  const vorlage = page.url();
+  await page.getByLabel("Beschreibung Position 1").fill("Wartungspaket für 50 Geräte");
+  await page.getByRole("button", { name: "Kopieren", exact: true }).click();
+  await page.waitForURL((url) => /\/angebote\/[0-9a-f-]{36}$/.test(url.pathname) && url.href !== vorlage);
+  await expect(page.getByLabel("Beschreibung Position 1")).toHaveValue("Wartungspaket für 50 Geräte");
+  await expect(page.getByLabel(/Einzelpreis Position 1/)).toHaveValue("12,50");
+  await expect(page.getByRole("button", { name: "Festschreiben", exact: true }).first()).toBeVisible();
+  await page.goto(vorlage);
+  await expect(page.getByLabel("Beschreibung Position 1")).toHaveValue("Wartungspaket für 50 Geräte");
+});
+
 test("Kontaktseite: Zeiteinträge des Kunden erfassen und ansehen, Rechnung mit diesem Kunden schreiben (#1557)", async () => {
   await go("/kontakte");
   const kontakt = (await page.getByRole("link", { name: "Nordwerk Software GmbH" }).first().getAttribute("href"))!;
@@ -995,8 +1087,71 @@ test("Kontaktseite: Zeiteinträge des Kunden erfassen und ansehen, Rechnung mit 
   await expect(page.getByText("Eintrag gelöscht.")).toBeVisible();
 });
 
+test("Stornierte Rechnung als Ersatz erneut ausstellen, Leistungszeitraum und Bezug bleiben erhalten (#1454)", async () => {
+  await go("/rechnungen/neu");
+  await kundeWaehlen(page, "Nordwerk Software GmbH · Hamburg");
+  await page.getByLabel("Rechnungsdatum").fill(currentDay());
+  await page.getByLabel("Leistung von").fill(day(-24));
+  await page.getByLabel("Leistung bis").fill(day(-23));
+  await page.getByLabel("Beschreibung Position 1").fill("Beratung zur Website");
+  await page.getByLabel("Menge Position 1").fill("1");
+  await page.getByLabel(/Einzelpreis Position 1/).fill("100,00");
+  await page.getByRole("button", { name: "Entwurf speichern" }).click();
+  await page.waitForURL(/rechnungen\/[0-9a-f-]{36}$/);
+  await page.getByRole("button", { name: "Festschreiben", exact: true }).click();
+  await bestaetigen(page, "Festschreiben");
+  await expect(page.getByText(/Festgeschrieben/).first()).toBeVisible({ timeout: 30_000 });
+  const original = new URL(page.url()).pathname;
+  const originalTitel = (await page.getByRole("heading", { level: 1 }).textContent())?.trim() ?? "";
+  const ersatzAktion = page.getByRole("button", { name: "Ersatzrechnung erstellen", exact: true });
+  await expect(ersatzAktion).toHaveCount(0);
+  await page.getByRole("button", { name: "Stornieren", exact: true }).click();
+  await bestaetigen(page, "Stornieren");
+  await expect(page.getByRole("heading", { level: 1, name: /^Stornorechnung/ })).toBeVisible();
+  await go(original);
+  const viewport = page.viewportSize();
+  await page.setViewportSize({ width: 375, height: 812 });
+  await expect(ersatzAktion).toBeInViewport({ ratio: 1 });
+  if (viewport) await page.setViewportSize(viewport);
+
+  // Eine normale Kopie bleibt eine neue Rechnung ohne alten Leistungszeitraum und ohne Austauschbezug.
+  await page.getByRole("button", { name: "Kopieren", exact: true }).click();
+  await page.waitForURL((url) => url.pathname !== original && /^\/rechnungen\/[0-9a-f-]{36}$/.test(url.pathname));
+  await expect(page.getByLabel("Leistung von")).toHaveValue("");
+  const originalLink = page.getByRole("link", { name: originalTitel, exact: true });
+  await expect(originalLink).toHaveCount(0);
+  await go(original);
+
+  await ersatzAktion.click();
+  await page.waitForURL((url) => url.pathname !== original && /^\/rechnungen\/[0-9a-f-]{36}$/.test(url.pathname));
+  const ersatz = new URL(page.url()).pathname;
+  await expect(originalLink).toHaveAttribute("href", original);
+  await expect(page.getByLabel("Leistung von")).toHaveValue(day(-24));
+  await expect(page.getByLabel("Leistung bis")).toHaveValue(day(-23));
+  await page.getByLabel("Beschreibung Position 1").fill("Beratung zur Website, ergänzte Beschreibung");
+  await page.getByRole("button", { name: "Entwurf speichern" }).click();
+  await expect(page.getByText("Entwurf gespeichert.", { exact: true })).toBeVisible();
+  await expect(originalLink).toHaveAttribute("href", original);
+  await page.getByRole("button", { name: "Festschreiben", exact: true }).click();
+  await bestaetigen(page, "Festschreiben");
+  await expect(page.getByText(/Festgeschrieben/).first()).toBeVisible({ timeout: 30_000 });
+  await expect(originalLink).toHaveAttribute("href", original);
+  const ersatzTitel = (await page.getByRole("heading", { level: 1 }).textContent())?.trim() ?? "";
+  await go(original);
+  await expect(page.getByRole("link", { name: ersatzTitel, exact: true })).toHaveAttribute("href", ersatz);
+  await expect(ersatzAktion).toHaveCount(0);
+});
+
 test("Seiten mit den Daten dieses Abschnitts ohne axe-Verstöße", async () => {
   await ohneAxeVerstoesse(page, ["/angebote", "/einstellungen?bereich=email", "/rechnungen"]);
+});
+
+test("Sondergebiete: Hinweis ohne stille Änderung in Kontakt, Rechnung und Angebot (#1046)", async () => {
+  await sondergebietePruefen(page);
+});
+
+test("Sondergebiete: tatsächlichen Leistungsort in Rechnung, Angebot und Serie selbst bestätigen (#1046)", async () => {
+  await sondergebietsLeistungsortPruefen(page);
 });
 
 test("Keine Fehler im Browser", async () => {

@@ -1,10 +1,12 @@
-import { advanceUsesPayments, CURRENCY_CODE, parseExchangeRate } from "@haben/core";
+import { advanceUsesPayments, CURRENCY_CODE, parseExchangeRate, vatTerritory } from "@haben/core";
 import { Link } from "@tanstack/react-router";
+import { useId } from "react";
 import { FORMAT_LABEL, FORMATS } from "../lib/invoice.ts";
 import type { DraftInput } from "../server/modules/rechnungen/index.ts";
 import { Field } from "./Field.tsx";
 import { OrderReferenceFields } from "./OrderReferenceFields.tsx";
 import { InvoiceCustomerFields, InvoiceDatePaymentFields, InvoiceTaxFields } from "./InvoiceEditorFields.tsx";
+import { ForeignCurrencyHint, FORMAT_HINT, ServiceHint, serviceHintIds, serviceHintState } from "./InvoiceEditorHinweise.tsx";
 import type { InvoiceEditorModel } from "./use-invoice-editor.ts";
 
 // Karte „Rechnungsdaten“ bzw. „Angebotsdaten“: Art, Kunde, Daten, Zahlung, Währung, Format und Steuer
@@ -12,7 +14,9 @@ import type { InvoiceEditorModel } from "./use-invoice-editor.ts";
 export function InvoiceEditorDetails({ editor }: { editor: InvoiceEditorModel }) {
   const {
     advanceType,
+    contact,
     contacts,
+    currencyCode,
     editable,
     error,
     format,
@@ -27,16 +31,21 @@ export function InvoiceEditorDetails({ editor }: { editor: InvoiceEditorModel })
     setReferences,
     setServiceFrom,
     setServiceTo,
+    taxTreatment,
     touch,
     variant,
   } = editor;
+  const serviceHint = serviceHintState({ kind, variant, advanceType, currency: currencyCode, taxTreatment });
+  const serviceHintFor = serviceHintIds(serviceHint);
+  const territoryHintId = useId();
+  const territoryDescription = editable && vatTerritory(contact?.land, contact?.plz) ? territoryHintId : undefined;
   return (
     <section className="card" aria-label={quote ? "Angebotsdaten" : "Rechnungsdaten"}>
       <div className="form-grid">
         <InvoiceVariantFields editor={editor} />
-        <InvoiceCustomerFields editor={editor} />
+        <InvoiceCustomerFields editor={editor} territoryDescription={territoryDescription} />
         <InvoiceDatePaymentFields editor={editor} />
-        <Field label="Leistung von" error={error("serviceFrom")}>
+        <Field label="Leistung von" describedBy={serviceHintFor.von} error={error("serviceFrom")}>
           {(control) => (
             <input
               {...control}
@@ -47,9 +56,10 @@ export function InvoiceEditorDetails({ editor }: { editor: InvoiceEditorModel })
             />
           )}
         </Field>
-        <Field label="Leistung bis">
+        <Field label="Leistung bis" describedBy={serviceHintFor.bis}>
           {(control) => <input {...control} type="date" value={serviceTo} onChange={(e) => touch(setServiceTo)(e.target.value)} />}
         </Field>
+        <ServiceHint state={serviceHint} />
         <OrderReferenceFields value={references} onChange={touch(setReferences)} disabled={!editable} />
         <Field label="Sprache" hint="Texte im PDF und in der E-Mail; die E-Rechnung selbst bleibt maschinenlesbar wie gehabt." style={{ gridColumn: "1 / -1" }}>
           {(control) => (
@@ -61,7 +71,7 @@ export function InvoiceEditorDetails({ editor }: { editor: InvoiceEditorModel })
         </Field>
         {kind === "rechnung" && <InvoiceCurrencyFields editor={editor} />}
         {!quote && (
-          <Field label="E-Rechnungsformat" style={{ gridColumn: "1 / -1" }}>
+          <Field label="E-Rechnungsformat" hint={FORMAT_HINT} style={{ gridColumn: "1 / -1" }}>
             {(control) => (
               <select {...control} value={format} onChange={(e) => touch(setFormat)(e.target.value as DraftInput["format"])}>
                 {FORMATS.map((f) => (
@@ -73,7 +83,7 @@ export function InvoiceEditorDetails({ editor }: { editor: InvoiceEditorModel })
             )}
           </Field>
         )}
-        <InvoiceTaxFields editor={editor} />
+        <InvoiceTaxFields editor={editor} territoryDescription={territoryDescription} />
       </div>
       {!contacts.length && (
         <p className="small muted" style={{ margin: 0 }}>
@@ -184,14 +194,7 @@ export function InvoiceCurrencyFields({ editor }: { editor: InvoiceEditorModel }
           {(control) => <input {...control} type="date" value={exchangeRateDate} onChange={(e) => touch(setExchangeRateDate)(e.target.value)} />}
         </Field>
       )}
-      {foreign && (
-        <span id="invoice-currency-hint" className="small" style={{ gridColumn: "1 / -1" }}>
-          {rateInfo && <strong>{rateInfo}. </strong>}
-          Preise und Summen in {currencyCode || "der Fremdwährung"}; die Umsatzsteuer steht zusätzlich in Euro auf der Rechnung (§ 14 Abs. 4 Nr. 8 UStG).
-          Gebucht wird in Euro. Ohne eigenen Kurs nimmt Haben den Umsatzsteuer-Umrechnungskurs des Leistungsmonats, sobald das BMF ihn veröffentlicht hat. Kein
-          GiroCode, keine Abschlags- oder Schlussrechnung, keine Mahnung aus Haben.
-        </span>
-      )}
+      {foreign && <ForeignCurrencyHint currencyCode={currencyCode} rateInfo={rateInfo} />}
     </>
   );
 }
