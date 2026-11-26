@@ -69,6 +69,7 @@ export function ZuordnungenListe({
             <span className="small muted">
               {a.reversed ? "aufgehoben" : a.splitId ? `${a.amount < 0 ? "−" : "+"}${formatEuro(Math.abs(a.amount))}` : formatEuro(Math.abs(a.amount))}
               {a.splitId ? " · Teil einer Aufteilung" : ""}
+              {a.reassignsId && a.date && ` · neu zugeordnet zum ${formatDate(a.date)}`}
             </span>
           </div>
           {!a.reversed && (!a.splitId || firstOfSplit.has(a.id)) && (

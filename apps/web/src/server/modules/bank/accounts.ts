@@ -1,7 +1,7 @@
 // Bankkonten und Konten der Zahlungsdienstleister: anlegen, ändern, auflisten
 
 import { BankError } from "./bank-error.ts";
-import { gruppiereGebuehren, type OwnAccount } from "@haben/core";
+import { AMAZON_MARKETPLACES, gruppiereGebuehren, type OwnAccount } from "@haben/core";
 import { and, asc, desc, eq, isNull, sql } from "drizzle-orm";
 import { z } from "zod";
 import { withActor } from "../../db/actor.ts";
@@ -65,6 +65,11 @@ export async function listAccounts() {
           : ((await db.select({ n: sql<number>`count(*)::int` }).from(schema.bankTransactions).where(offeneUmsaetze))[0]?.n ?? 0);
       // Umsätze, die auf einem privaten Konto nicht buchbar sind, zählen nicht als offen, sondern stehen daneben (#1088)
       const privateCount = await zaehlePrivat(account.id);
+      // Ob das Konto schon Umsätze hat: der Marktplatz eines Amazon-Kontos lässt sich nur solange ändern
+      const [gesamt] = await db
+        .select({ n: sql<number>`count(*)::int` })
+        .from(schema.bankTransactions)
+        .where(eq(schema.bankTransactions.bankAccountId, account.id));
       // Zahlungsdienstleister nennen keinen Kontostand: Guthaben als Summe der importierten Umsätze
       const [sum] =
         account.purpose === "zahlungsdienstleister"
@@ -92,6 +97,7 @@ export async function listAccounts() {
         lastImport: last ?? null,
         openCount,
         privateCount,
+        hasTransactions: (gesamt?.n ?? 0) > 0,
         providerBalance: sum ? Number(sum.total) : null,
         staleOpenCount: stale?.n ?? 0,
       };
@@ -111,12 +117,19 @@ export async function createAccount(actor: string, input: z.input<typeof account
   });
 }
 
-/** Zweck nur bei Bankkonten; ein Zahlungsdienstleister bleibt einer */
-export const accountSettingsSchema = z.object({ id: z.uuid(), name: accountSchema.shape.name, purpose: purposeSchema.optional() });
+/** Zweck nur bei Bankkonten; ein Zahlungsdienstleister bleibt einer. Der Marktplatz lässt sich nur ändern, solange das Konto leer ist (§ Marktplatzprüfung). */
+export const accountSettingsSchema = z.object({
+  id: z.uuid(),
+  name: accountSchema.shape.name,
+  purpose: purposeSchema.optional(),
+  marketplace: z.string().trim().min(1).max(40).optional(),
+});
 
 /**
  * Name und Zweck eines Kontos ändern. Beides ist nur Anzeige bzw. Vorschlag: Umsätze hängen an der ID,
- * der Import findet das Konto über die IBAN, Buchungen gehen weiter auf das eine Bankkonto.
+ * der Import findet das Konto über die IBAN, Buchungen gehen weiter auf das eine Bankkonto. Den Marktplatz
+ * eines Amazon-Kontos nimmt nur ein noch leeres Konto an — danach bleibt er fest, damit kein Report in das
+ * falsche Konto läuft.
  */
 export async function updateAccount(actor: string, input: z.infer<typeof accountSettingsSchema>) {
   await withActor(actor, async (tx) => {
@@ -124,19 +137,37 @@ export async function updateAccount(actor: string, input: z.infer<typeof account
     if (!account) throw new BankError("Konto nicht gefunden.");
     // Ein Zahlungsdienstleister bleibt einer (eigenes Verrechnungskonto, keine IBAN); dort ändert sich nur der Name
     const purpose = account.purpose === "zahlungsdienstleister" ? account.purpose : (input.purpose ?? account.purpose);
-    await tx.update(schema.bankAccounts).set({ name: input.name, purpose }).where(eq(schema.bankAccounts.id, input.id));
+    let marketplace = account.marketplace;
+    // Nur eine echte Änderung prüfen: das Formular sendet den Marktplatz auch unverändert mit, das Umbenennen bleibt möglich
+    if (account.provider === "amazon" && input.marketplace !== undefined && input.marketplace !== account.marketplace) {
+      if (!AMAZON_MARKETPLACES.includes(input.marketplace)) throw new BankError("Unbekannter Marktplatz.");
+      const [belegt] = await tx
+        .select({ id: schema.bankTransactions.id })
+        .from(schema.bankTransactions)
+        .where(eq(schema.bankTransactions.bankAccountId, input.id))
+        .limit(1);
+      if (belegt) throw new BankError("Der Marktplatz lässt sich nur ändern, solange das Konto keine Umsätze hat.");
+      marketplace = input.marketplace;
+    }
+    await tx.update(schema.bankAccounts).set({ name: input.name, purpose, marketplace }).where(eq(schema.bankAccounts.id, input.id));
   });
 }
 
-export const providerAccountSchema = z.object({
-  name: z.string().trim().min(1, "Name fehlt").max(100),
-  provider: z.enum(["paypal", "stripe", "shopify", "etsy", "ebay", "sumup", "googleplay", "appstore", "sonstige"]),
-});
+export const providerAccountSchema = z
+  .object({
+    name: z.string().trim().min(1, "Name fehlt").max(100),
+    provider: z.enum(["paypal", "stripe", "shopify", "etsy", "ebay", "amazon", "sumup", "googleplay", "appstore", "sonstige"]),
+    marketplace: z.string().trim().max(40).optional(),
+  })
+  .superRefine((value, ctx) => {
+    if (value.provider === "amazon") {
+      if (!value.marketplace) ctx.addIssue({ code: "custom", path: ["marketplace"], message: "Bitte den Marktplatz wählen." });
+      else if (!AMAZON_MARKETPLACES.includes(value.marketplace)) ctx.addIssue({ code: "custom", path: ["marketplace"], message: "Unbekannter Marktplatz." });
+    } else if (value.marketplace) {
+      ctx.addIssue({ code: "custom", path: ["marketplace"], message: "Ein Marktplatz gehört nur zu Amazon." });
+    }
+  });
 
-/**
- * Konto für einen Zahlungsdienstleister (PayPal-Guthaben, Stripe, Shopify Payments): ohne IBAN, mit eigenem
- * Verrechnungskonto (1361 … bzw. 1461 …). Importiert wird dessen CSV-Export in dieses Konto.
- */
 export async function createProviderAccount(actor: string, input: z.input<typeof providerAccountSchema>) {
   const data = providerAccountSchema.parse(input);
   return withActor(actor, async (tx) => {
@@ -147,7 +178,14 @@ export async function createProviderAccount(actor: string, input: z.input<typeof
     if (!ledgerIndex) throw new BankError("Es gibt schon neun Zahlungsdienstleister; mehr Verrechnungskonten sieht Haben nicht vor.");
     const [created] = await tx
       .insert(schema.bankAccounts)
-      .values({ name: data.name, iban: null, purpose: "zahlungsdienstleister", provider: data.provider, ledgerIndex })
+      .values({
+        name: data.name,
+        iban: null,
+        purpose: "zahlungsdienstleister",
+        provider: data.provider,
+        marketplace: data.provider === "amazon" ? (data.marketplace ?? null) : null,
+        ledgerIndex,
+      })
       .returning();
     return created!;
   });

@@ -2,6 +2,7 @@ import { Link } from "@tanstack/react-router";
 import type { ComponentProps } from "react";
 import { Icon } from "../../../components/Icon.tsx";
 import { InvoiceCopyButton } from "../../../components/InvoiceCopyButton.tsx";
+import { InvoiceReplacementNotice } from "../../../components/InvoiceReplacementNotice.tsx";
 import { InvoiceStatus } from "../../../components/InvoiceStatus.tsx";
 import { type Detail, titleOf } from "./-rechnung-daten.ts";
 
@@ -63,6 +64,13 @@ export function RechnungKopf({
           </span>
         </div>
       )}
+      {inhaber && cancelled && invoice.kind === "rechnung" && invoice.variant === null && !data.replacedBy && (
+        <div className="actions">
+          <InvoiceCopyButton invoice={invoice} action={action} replacement />
+        </div>
+      )}
+      {data.replaces && <InvoiceReplacementNotice reference={data.replaces} />}
+      {data.replacedBy && <InvoiceReplacementNotice reference={data.replacedBy} replacedBy />}
       {data.leistungsmonat && (
         <div className="banner banner-warn" role="status">
           <Icon name="alert" />

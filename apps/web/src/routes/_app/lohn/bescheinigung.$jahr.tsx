@@ -10,6 +10,7 @@ import { formatDate, formatLongDate } from "../../../lib/format.ts";
 import { useAction } from "../../../lib/use-action.ts";
 import { getLstb, stornoLstbFn, submitLstbFn, vermerkeLstbFn } from "../../../server/functions/lstb.ts";
 import { Field } from "../../../components/Field.tsx";
+import { useFokusUeberWechsel } from "../../../lib/use-fokus-ueber-wechsel.ts";
 
 /*
  * Personal › Lohnsteuerbescheinigung (§ 41b EStG): je Mitarbeiter und Jahr die Werte aus den festgeschriebenen
@@ -47,6 +48,8 @@ const zahl = (tausendstel: number) => (tausendstel / 1000).toLocaleString("de-DE
 function LstbPage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  // Die Auswahl behält beim Wechsel den Fokus, obwohl die Seite neu entsteht
+  const auswahl = useFokusUeberWechsel<HTMLSelectElement>("lstb-jahr");
   const dieses = Number(data.heute.slice(0, 4));
   const jahre = [...new Set([data.year, dieses, dieses - 1])].sort((a, b) => b - a);
   return (
@@ -58,7 +61,15 @@ function LstbPage() {
         </div>
         <Field label="Jahr">
           {(control) => (
-            <select {...control} value={data.year} onChange={(e) => navigate({ to: "/lohn/bescheinigung/$jahr", params: { jahr: e.target.value } })}>
+            <select
+              {...control}
+              ref={auswahl.ref}
+              value={data.year}
+              onChange={(e) => {
+                auswahl.merken();
+                void navigate({ to: "/lohn/bescheinigung/$jahr", params: { jahr: e.target.value } });
+              }}
+            >
               {jahre.map((j) => (
                 <option key={j} value={j}>
                   {j}

@@ -7,7 +7,7 @@ description: >-
 
 # Umzug aus WISO EÜR & Kasse
 
-Für ein Einzelunternehmen mit EÜR bietet sich der Wechsel zum **1. Januar** an: Das letzte Jahr bleibt in WISO, das neue beginnt in Haben. Für Anlagen kann Haben einen CSV-Entwurf aus dem WISO-PDF erstellen. CSV-Dateien für Kontakte und Artikel bereitest du selbst vor.
+Für ein Einzelunternehmen mit EÜR bietet sich der Wechsel zum **1. Januar** an. Das letzte Jahr bleibt in WISO, das neue beginnt in Haben. Für Kontakte und Anlagen kann Haben einen CSV-Entwurf aus dem WISO-PDF erstellen. Die CSV für Artikel bereitest du selbst vor.
 
 > [!IMPORTANT]
 > Haben bietet als Rechtsform nur Einzelunternehmen, GmbH und UG an. Eine Partnerschaft ist damit derzeit nicht abgedeckt; richte sie nicht ersatzweise als Einzelunternehmen ein. GmbH und UG bilanzieren in Haben, dieser EÜR-Ablauf gilt für sie nicht. Bei einem Wechsel der Gewinnermittlung klärst du zuerst die Eignung mit der Steuerberatung; siehe [Einrichtung](einrichtung.md#rechtsform-einzelunternehmen-gmbh-oder-ug).
@@ -16,7 +16,8 @@ Für ein Einzelunternehmen mit EÜR bietet sich der Wechsel zum **1. Januar** an
 
 | Bestand aus WISO | Weg nach Haben |
 | --- | --- |
-| Kontakte und Artikel | Aus den Listen eine CSV erstellen, [Spalten zuordnen und Vorschau prüfen](csv-import.md) |
+| Kontakte | WISO-Kontaktliste auslesen oder CSV selbst erstellen, [Spalten zuordnen und Vorschau prüfen](csv-import.md#kontakte) |
+| Artikel | Aus der Liste eine CSV erstellen und [im Artikelimport prüfen](csv-import.md#artikel) |
 | Anlagen | WISO-Anlagenverzeichnis auslesen, CSV-Entwurf ergänzen und im [Anlagenimport](csv-import.md#anlagen) prüfen |
 | Originalexporte und PDF-Listen | Unverändert aufbewahren; optional als Originaldateien im Archiv ablegen |
 | Buchungs-CSV (WISO EÜR & Kasse und WISO Steuer, Modul EÜR) | Unter **Archiv › Umzug › Umzug aus WISO** prüfen und unveränderlich als durchsuchbare Archivbelege samt Original-CSV übernehmen; Journalbuchungen entstehen daraus nicht |
@@ -61,6 +62,10 @@ Bereite für Kontakte, Anlagen und gegebenenfalls Artikel je eine eigene CSV mit
 Öffne **CSV importieren** unter **Kontakte**, **Anlagen** oder **Artikel**. Prüfe die erkannten Spaltenzuordnungen sowie Fehler und Dubletten vor **Übernehmen**. Die genauen Dateiformate und Feldregeln stehen im [CSV-Import](csv-import.md#so-gehst-du-vor).
 
 ### Kontakte
+
+Unter **Archiv › Umzug › Umzug aus WISO** kannst du die Liste **Kunden / Interessenten** als PDF mit Textebene prüfen (höchstens 20 MB und 100 Seiten). Haben liest Nummer, Name und erste Anschrift lokal auf dem Server aus und speichert dabei keine Kontakte. Ein unbekanntes Layout oder eine nicht eindeutig lesbare Anschrift lehnt Haben ab; dann erstellst du die CSV von Hand.
+
+Vergleiche Namen und Anschriften im CSV-Entwurf mit dem PDF. In der Spalte **Rolle** steht **Bitte prüfen**, weil die WISO-Liste Kunden und Interessenten nicht je Zeile unterscheidet: Trage die Rolle ein und entferne die Zeilen, die du nicht übernimmst. Bei fünfstelliger PLZ schlägt Haben `DE` als **Land** vor, sonst steht dort **Bitte prüfen**, und die Vorschau zeigt **Land prüfen**.
 
 - Übernimm die WISO-Kundennummer als **Kundennummer**, nicht ungeprüft als DATEV-Debitor. Bewahre führende Nullen bei der Vorbereitung als Text.
 - Führe umgebrochene Namen zusammen. Trenne Firma, Vor- und Nachname nur, wenn die Zuordnung eindeutig ist. Ein Ansprechpartner unter der Anschrift ist kein weiterer Kunde.

@@ -3,6 +3,7 @@ import { desc, eq, sql } from "drizzle-orm";
 import { decrypt } from "../../crypto.ts";
 import { db, schema } from "../../db/index.ts";
 import { UserError } from "../../errors.ts";
+import { recordElsterSubmission } from "../../metriken.ts";
 
 /*
  * ELSTER-Gateway (#81): alles, was jede Übermittlung an die Finanzverwaltung braucht, an einer Stelle.
@@ -108,7 +109,9 @@ export async function protocolSubmission(vorgang: ElsterVorgang, result: ElsterR
     await write();
   } catch (error) {
     if (vorgang !== "send" || !result.ok) throw error;
-    console.error("ELSTER: Echtübermittlung erfolgt, Protokoll nicht gespeichert", { transferTicket: result.transferTicket, requestXml: xml }, error);
+    // Gewollte Ausnahme von der Regel, keine Daten ins Log zu schreiben (architektur.md): der Nachweis der Übermittlung.
+    // Der Filter maskiert IBANs auch hier; der Nachweis ist das Transferticket.
+    console.error("ELSTER: Echtübermittlung erfolgt, Protokoll nicht gespeichert", { transferTicket: result.transferTicket, requestXml: xml, error });
     throw new UserError(
       `Die Übermittlung ist erfolgt (Transferticket ${result.transferTicket ?? "unbekannt"}), ließ sich aber nicht speichern. Bitte nicht erneut senden; Transferticket und gesendete Daten stehen im Server-Log.`,
       { cause: error },
@@ -132,18 +135,29 @@ export interface Uebermittlung<T> {
   print?: boolean;
 }
 
+/** Zählt die Antwort von ERiC für /api/metrics, nur das Ergebnis; ein Absturz des Workers zählt als Fehler, eine fehlende PIN nicht */
+async function ericAntwort(vorgang: ElsterVorgang, call: () => Promise<ElsterResult>): Promise<ElsterResult> {
+  let result: ElsterResult;
+  try {
+    result = await call();
+  } catch (error) {
+    if (!(error instanceof UserError)) recordElsterSubmission(vorgang, false);
+    throw error;
+  }
+  recordElsterSubmission(vorgang, result.ok);
+  return result;
+}
+
 /** Ganzer Ablauf einer Übermittlung: Sperre, Zugang, XML, Prüfen oder Senden, Protokoll */
 export function uebermitteln<T>(client: ElsterClient, u: Uebermittlung<T>): Promise<ElsterResult> {
   return underSendLock(u.sperre, u.vorgang, async () => {
     const z = zugang(client, u.vorgang, u.herstellerId, u.bezeichnung);
     const { xml, daten } = await u.vorbereiten(z);
-    let result: ElsterResult;
-    if (u.vorgang === "validate") {
-      result = await client.validate(xml);
-    } else {
+    const result = await ericAntwort(u.vorgang, async () => {
+      if (u.vorgang === "validate") return client.validate(xml);
       const { pfx, pin } = await signatur({ pin: u.pin, gespeichertePin: u.gespeichertePin });
-      result = await client.send(xml, pfx, pin, { test: z.test, ...(u.print === false ? { print: false } : {}) });
-    }
+      return client.send(xml, pfx, pin, { test: z.test, ...(u.print === false ? { print: false } : {}) });
+    });
     await protocolSubmission(u.vorgang, result, xml, () => u.protokollieren(result, xml, daten, z));
     return result;
   });

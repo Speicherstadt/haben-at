@@ -22,7 +22,7 @@ function QuotePage() {
     return (
       <InvoiceEditor
         // nach dem Speichern mit den gespeicherten Werten neu aufsetzen, auch in derselben Sekunde (#1804)
-        key={`${quote.id}-${quote.updatedAt.toISOString()}`}
+        key={quote.updatedAt.toISOString()}
         action={draftAction}
         id={quote.id}
         kind="angebot"

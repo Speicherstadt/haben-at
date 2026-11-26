@@ -156,6 +156,31 @@ describe.skipIf(!testDatabaseUrl)("Rechnung kopieren (Postgres)", () => {
     expect(await kopieren.copyInvoice(actor, original.id, heute)).toMatchObject({ status: "draft", kind: "rechnung", gross: original.gross });
   });
 
+  it("legt erst nach dem Storno ein Ersatzpapier mit ursprünglicher Leistung und Originalkurs an", async () => {
+    await sql`update company set versteuerung = 'soll'`;
+    const original = await final({ currency: "USD", exchangeRate: "1,0812", exchangeRateDate: "2026-09-30" });
+    await expect(kopieren.copyInvoice(actor, original.id, heute, { replacement: true })).rejects.toThrow(/zuerst storniert/);
+    expect(await sql`select id from invoices where status = 'draft'`).toEqual([]);
+    await invoices.cancelInvoice(actor, original.id, "2026-10-05");
+
+    const replacement = await kopieren.copyInvoice(actor, original.id, heute, { replacement: true });
+    expect(replacement).toMatchObject({
+      status: "draft",
+      replacesInvoiceId: original.id,
+      issueDate: heute,
+      serviceFrom: original.serviceFrom,
+      serviceTo: original.serviceTo,
+      currency: "USD",
+      exchangeRate: original.exchangeRate,
+      exchangeRateSource: original.exchangeRateSource,
+      gross: original.gross,
+    });
+    await expect(invoices.updateDraft(actor, replacement.id, draftInput({ issueDate: heute, currency: "USD", exchangeRate: "1,09" }))).rejects.toThrow(
+      /Umrechnungskurs/,
+    );
+    expect(await kopieren.copyInvoice(actor, replacement.id, heute)).toMatchObject({ replacesInvoiceId: null, serviceFrom: null, serviceTo: null });
+  });
+
   it("macht aus „bereits bezahlt“ eine Überweisung ohne Zahlungsdienst und Datum", async () => {
     const original = await final({ paymentMethod: "bereits_bezahlt", paidVia: "PayPal", paidOn: "2026-10-01" });
     expect(await kopieren.copyInvoice(actor, original.id, heute)).toMatchObject({ paymentMethod: "ueberweisung", paidVia: null, paidOn: null });

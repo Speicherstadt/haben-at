@@ -11,6 +11,7 @@ import { useAction } from "../../../lib/use-action.ts";
 import { getZm, submitZmMeldung } from "../../../server/functions/zm.ts";
 import { Field } from "../../../components/Field.tsx";
 import { ZmBestaetigung } from "../../../components/umsatzsteuer/ZmBestaetigung.tsx";
+import { useFokusUeberWechsel } from "../../../lib/use-fokus-ueber-wechsel.ts";
 
 export const Route = createFileRoute("/_app/umsatzsteuer/zm/$quartal")({
   loader: ({ params }) => {
@@ -29,6 +30,8 @@ type Zeile = Data["zeilen"][number];
 function ZmPage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  // Die Auswahl behält beim Wechsel den Fokus, obwohl die Seite neu entsteht
+  const auswahl = useFokusUeberWechsel<HTMLSelectElement>("zm-quartal");
   const key = periodKey(data.period);
   const options = data.quartale.some((q) => periodKey(q) === key) ? data.quartale : [...data.quartale, data.period];
 
@@ -41,7 +44,15 @@ function ZmPage() {
         </div>
         <Field label="Quartal">
           {(control) => (
-            <select {...control} value={key} onChange={(event) => navigate({ to: "/umsatzsteuer/zm/$quartal", params: { quartal: event.target.value } })}>
+            <select
+              {...control}
+              ref={auswahl.ref}
+              value={key}
+              onChange={(event) => {
+                auswahl.merken();
+                void navigate({ to: "/umsatzsteuer/zm/$quartal", params: { quartal: event.target.value } });
+              }}
+            >
               {options.map((option) => (
                 <option key={periodKey(option)} value={periodKey(option)}>
                   {periodLabel(option)}

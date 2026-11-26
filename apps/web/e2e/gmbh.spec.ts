@@ -3,9 +3,9 @@ import { waehleKategorie } from "./kategorie.ts";
 import { filePickerPruefen } from "./dateiauswahl.ts";
 import AxeBuilder from "@axe-core/playwright";
 import { readFile } from "node:fs/promises";
-import { expect, test, type Locator, type Page } from "@playwright/test";
+import { expect, test, type Locator, type Page, type Route } from "@playwright/test";
 import { FORM01 } from "@haben/core";
-import { bestaetigen, fragenUeberspringen, faktenZeigen, kundeWaehlen } from "./einrichtung.ts";
+import { bestaetigen, fragenUeberspringen, faktenZeigen, kundeWaehlen, ueberSchnellsuche } from "./einrichtung.ts";
 import { currentDay, currentYear, vorschauAnheften } from "./daten.ts";
 import { anzahlungsbilanzPruefen } from "./anzahlung-bilanz.ts";
 
@@ -1124,6 +1124,37 @@ test("SV-Meldeportal: Minijob abrechnen, Beitragsnachweis und Anmeldung abtippen
   await expect(page.getByRole("row", { name: new RegExp(`Anmeldung Mia Aushilfe \\(Beginn 01\\.${mm}\\.${lohnJahr}\\)`) })).toBeVisible();
   await page.getByText(/^Erledigt \(/).click();
   await expect(page.getByRole("row", { name: new RegExp(`Beitragsnachweis ${lohnMonatsname} ${lohnJahr} · Minijob-Zentrale`) })).toBeVisible();
+});
+
+test("Mitarbeiter: Beim Wechsel ohne Neuladen bleiben „Stammdaten gespeichert.“ und ein Fehler des vorigen nicht stehen (#1843)", async () => {
+  // Erika und Mia aus den Tests davor
+  test.skip(!LOHN_BMF[lohnJahr], `Werte für ${lohnJahr} fehlen`);
+  const erika = page.getByRole("heading", { level: 1, name: "Erika Gesellschafter" });
+  const speichern = page.getByRole("button", { name: "Speichern", exact: true });
+  const gespeichert = page.getByRole("status").filter({ hasText: "Stammdaten gespeichert." });
+  const fehler = page.getByRole("alert");
+  await go("/lohn");
+  await ueberSchnellsuche(page, "Erika Gesellschafter", /Erika Gesellschafter\s*Personalnr/);
+  await expect(erika).toBeVisible();
+  // Dieselbe Person gespeichert: Die Meldung bleibt
+  await speichern.click();
+  await expect(gespeichert).toBeVisible();
+
+  // Bei der anderen scheitert das Speichern
+  await ueberSchnellsuche(page, "Mia Aushilfe", /Mia Aushilfe\s*Personalnr/);
+  await expect(page.getByRole("heading", { level: 1, name: "Mia Aushilfe" })).toBeVisible();
+  await expect(gespeichert).toHaveCount(0);
+  const abbrechen = (route: Route) => (route.request().method() === "POST" ? route.abort() : route.continue());
+  await page.route(/_serverFn/, abbrechen);
+  await speichern.click();
+  await expect(fehler).toBeVisible();
+  await page.unroute(/_serverFn/, abbrechen);
+
+  // Zurück zu Erika: weder ihre Meldung von vorhin noch der Fehler bei Mia
+  await ueberSchnellsuche(page, "Erika Gesellschafter", /Erika Gesellschafter\s*Personalnr/);
+  await expect(erika).toBeVisible();
+  await expect(fehler).toHaveCount(0);
+  await expect(gespeichert).toHaveCount(0);
 });
 
 test("Fahrzeug der GmbH übernehmen: keine Staffel nach § 7 Abs. 2a EStG, linear mit Erinnerungswert", async () => {

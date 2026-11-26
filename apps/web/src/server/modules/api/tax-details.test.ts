@@ -29,4 +29,16 @@ describe("Steuerangaben im REST-Entwurf", () => {
     expect(draftPatchSchema.safeParse({ taxDetails }).success).toBe(true);
     expect(draftPatchSchema.safeParse({ taxDetails: null }).success).toBe(true);
   });
+
+  it("bewahrt die ausdrücklich erfasste Sondergebiets-PLZ beim Anlegen und Patchen", () => {
+    const actual = { ...taxDetails, exemption: null, foreignPlace: { country: "DE", postalCode: "27498", noForeignVat: true } };
+    expect(draftPatchSchema.parse({ taxDetails: actual })).toHaveProperty("taxDetails", actual);
+    expect(
+      draftCreateSchema.parse({
+        taxTreatment: "drittland",
+        taxDetails: actual,
+        lines: [{ description: "Leistung", quantity: 1000, unit: "Std.", unitPrice: 10_000, taxRate: 0 }],
+      }),
+    ).toHaveProperty("taxDetails", actual);
+  });
 });

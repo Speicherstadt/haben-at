@@ -6,10 +6,11 @@ import { UstIdHinweis } from "./UstIdHinweis.tsx";
 import { saveContact } from "../server/functions/contacts.ts";
 import type { Contact, ContactInput } from "../server/modules/stammdaten/index.ts";
 import { NoticeBanner } from "./NoticeBanner.tsx";
-import { ContactAddress, ContactBasics, ContactInvoices, ContactTax, type IbanSuggestion } from "./ContactFormTeile.tsx";
+import { ContactBasics, ContactInvoices, ContactTax, type IbanSuggestion } from "./ContactFormTeile.tsx";
 import { ContactWeitereAngaben, feldFehler, weitereAngabenFeld } from "./ContactWeitereAngaben.tsx";
 import { parseSkontoRows, type SkontoRow, toSkontoRows } from "./SkontoFields.tsx";
 import { useAction } from "../lib/use-action.ts";
+import { ContactAddressFields } from "./ContactAddressFields.tsx";
 import { useFokusNachSperre } from "../lib/use-fokus-nach-sperre.ts";
 
 const EMPTY: ContactInput = {
@@ -83,7 +84,7 @@ export function ContactForm({
           was man bis dahin tippt, ginge verloren (#1824) */}
       <fieldset className="fieldset-plain" disabled={busy}>
         <ContactBasics initial={initial} isNew={!contact} nextNumber={nextNumber} />
-        <ContactAddress initial={initial} />
+        <ContactAddressFields initial={initial} countryLabel={onSaved ? undefined : "Land (z. B. DE)"} />
         <ContactTax initial={initial} ustId={ustId} onUstId={setUstId} ibanSuggestion={ibanSuggestion} />
         <ContactInvoices initial={initial} />
         <ContactWeitereAngaben

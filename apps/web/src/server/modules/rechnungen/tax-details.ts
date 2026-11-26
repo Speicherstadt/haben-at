@@ -17,7 +17,11 @@ export const outgoingTaxDetailsSchema = z
       .nullable(),
     ancillary: z.boolean().nullable(),
     foreignPlace: z
-      .object({ country: z.string().refine((value) => LAENDERCODES.has(value), "Leistungsort: gültigen Ländercode wählen"), noForeignVat: z.boolean() })
+      .object({
+        country: z.string().refine((value) => LAENDERCODES.has(value), "Leistungsort: gültigen Ländercode wählen"),
+        postalCode: z.string().trim().max(20).optional(),
+        noForeignVat: z.boolean(),
+      })
       .nullable(),
     assetDisposal: z.boolean(),
   })

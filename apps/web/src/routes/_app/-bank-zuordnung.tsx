@@ -20,6 +20,7 @@ import { DIRECT_HINT, type Detail, korrekturText, zuAufhebendeZuordnung } from "
 import { SplitForm } from "./-bank-aufteilen.tsx";
 import { RestAktionen } from "./-bank-zuordnung-rest.tsx";
 import { BuchungsartWahl, KandidatWahl } from "./-bank-zuordnung-wahl.tsx";
+import { ReassignmentField } from "./-bank-wiederzuordnung.tsx";
 import { BesterTreffer, DirektVorschlagKarte, UmsatzKopf, ZuordnungenListe } from "./-bank-zuordnung-teile.tsx";
 import { type Gebuehr, type Optionen, useZuordnung, type Zuordnung } from "./-bank-zuordnung-zustand.ts";
 
@@ -99,6 +100,8 @@ function Aufteilen({ z }: { z: Zuordnung }) {
       initial={z.splitInitial}
       gegenposten={z.splitKorrekturen.map((k) => ({ type: "invoice", id: k.id, open: k.open }))}
       splitCandidates={z.detail.splitCandidates}
+      reassignmentDetail={z.detail}
+      gesellschaft={z.gesellschaft}
       {...z.optionen}
       busy={z.busy}
       onCancel={() => wahl.setMode(wahl.best ? "best" : z.detail.candidates.length ? "other" : "direct")}
@@ -208,6 +211,14 @@ function Knoepfe({ z }: { z: Zuordnung }) {
           />
         )}
       </Field>
+      <ReassignmentField
+        detail={z.detail}
+        amount={wahl.signedAmount}
+        value={z.reassignment}
+        error={z.error("reassignment")}
+        gesellschaft={z.gesellschaft}
+        onChange={z.setReassignment}
+      />
       {z.gebuehr && z.gebuehrWahl.moeglich && <GebuehrWahl gebuehr={z.gebuehr} wahl={z.gebuehrWahl} belege={z.detail.splitCandidates} busy={busy} />}
       <div className="actions">
         {mode !== "other" && (
@@ -247,6 +258,17 @@ function WeitereWege({ z }: { z: Zuordnung }) {
   const { sammelrechnung } = z.detail;
   return (
     <>
+      {rest.quellen.rest.amount !== 0 && z.detail.reassignment.length > 0 && (
+        <div className="stack" ref={rest.quellen.form}>
+          <ReassignmentField detail={z.detail} label="Aufgehobene Zuordnung für den Posten" gesellschaft={z.gesellschaft} {...rest.quellen.payment} />
+          <ReassignmentField
+            detail={z.detail}
+            label={rest.angebot.feeRest ? "Aufgehobene Zuordnung für die Gebühr" : "Aufgehobene Zuordnung für die Kursdifferenz"}
+            gesellschaft={z.gesellschaft}
+            {...rest.quellen.rest}
+          />
+        </div>
+      )}
       <RestAktionen
         target={rest.target}
         tx={tx}

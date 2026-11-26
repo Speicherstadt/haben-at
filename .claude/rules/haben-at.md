@@ -42,4 +42,4 @@ Keine Ausgabe: in Ordnung (bei `README.md` nur die Warnung oben). Dieselbe Prüf
     - Nummern in `git log` sind meist die von Haben und kein Beleg für „Erledigt“.
     - Das Feld „Bereich“ leer lassen und keine Labels setzen oder vermissen, bis der Maintainer sie für Haben AT festgelegt und angelegt hat.
     - Solange `PROJECT_TOKEN` fehlt, reagiert `/übernehmen` nicht und keine Karte rückt durch den Workflow „Board“ nach: zuweisen sowie „In Arbeit“ und „Im nächsten Release“ nach OK des Maintainers von Hand setzen.
-- Das Secret `PROJECT_TOKEN` hier nicht setzen, solange `scripts/board/github.ts` und `scripts/board/uebernahme.ts` die Nummer 3 fest enthalten: Sonst legt die Automatik beim Merge Karten von Haben AT auf dem Board von Haben an und lehnt `/übernehmen` ab, weil sie Board 7 nicht kennt. Dafür fehlt in Haben eine Nahtstelle.
+- Die Automatik von Haben (`scripts/board/projekt.ts`) nimmt die Nummer aus der Variable `BOARD_NUMMER` des Repositorys; hier steht sie auf `7`. Ohne die Variable bricht sie in Haben AT ab, statt auf Board 3 zu schreiben. Das Secret `PROJECT_TOKEN` erst setzen, wenn `BOARD_NUMMER` gesetzt ist.

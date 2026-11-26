@@ -403,6 +403,32 @@ describe.skipIf(!testDatabaseUrl)("Angebote (Postgres)", () => {
     expect((await quotes.getQuote(quote.id))!.quote.invoiceId).toBe(replacement.id);
   });
 
+  it("ein Ersatz behält dasselbe Angebot auch beim Speichern ohne Angebotsfeld", async () => {
+    await sql`update company set telefon = '+49 941 123456'`;
+    const quote = await quotes.finalizeQuote(actor, (await quotes.createQuoteDraft(actor, draft())).id);
+    const other = await quotes.finalizeQuote(actor, (await quotes.createQuoteDraft(actor, draft())).id);
+    const originalDraft = await quotes.quoteToInvoice(actor, quote.id, "2026-11-30");
+    const original = await invoices.finalizeInvoice(actor, originalDraft.id, kleinunternehmerStand);
+    await invoices.cancelInvoice(actor, original.id, "2026-12-10");
+    expect((await quotes.getQuote(quote.id))!.quote.invoiceId).toBeNull();
+
+    const input = editorInvoice({
+      replacesInvoiceId: original.id,
+      issueDate: "2026-12-15",
+      serviceFrom: original.serviceFrom,
+      serviceTo: original.serviceTo,
+    });
+    await expect(invoices.createDraft(actor, { ...input, quoteId: other.id })).rejects.toThrow(/dasselbe Angebot/);
+    const replacement = await invoices.createDraft(actor, input);
+    expect(replacement.quoteId).toBe(quote.id);
+    await expect(invoices.updateDraft(actor, replacement.id, { ...input, quoteId: other.id })).rejects.toThrow(/dasselbe Angebot/);
+    await expect(invoices.updateDraft(actor, replacement.id, input)).resolves.toMatchObject({ quoteId: quote.id });
+
+    await invoices.finalizeInvoice(actor, replacement.id, kleinunternehmerStand);
+    expect((await quotes.getQuote(quote.id))!.quote.invoiceId).toBe(replacement.id);
+    expect((await quotes.getQuote(other.id))!.quote.invoiceId).toBeNull();
+  });
+
   it("Text zur Position: gespeichert, gesperrt und an Rechnung, Schlussrechnung und Kopie weitergegeben", async () => {
     // Der Kunde bekommt XRechnung, die verlangt eine Telefonnummer des Verkäufers
     await sql`update company set telefon = '+49 941 123456'`;
@@ -430,5 +456,36 @@ describe.skipIf(!testDatabaseUrl)("Angebote (Postgres)", () => {
     const copy = await quotes.copyQuote(actor, quote.id, "2026-12-01");
     expect(copy).toMatchObject({ status: "draft", issueDate: "2026-12-01", validUntil: "2026-12-31", net: quote.net, serviceFrom: null });
     expect((await quotes.listQuotes("2026-12-01")).map((q) => q.listStatus)).toEqual(["entwurf", "abgelaufen"]);
+  });
+
+  it("kopiert auch einen Entwurf, etwa eine Vorlage, mit Wahlpositionen, Rabatt und Zahlungsplan; die Vorlage bleibt (#1881)", async () => {
+    const vorlage = await quotes.createQuoteDraft(
+      actor,
+      draft({
+        intro: "Wartungspaket",
+        lines: [line(9500, 1900, 40_000), { ...line(8500, 1900, 40_000), kind: "alternative" as const }, { ...line(5000, 700), kind: "optional" as const }],
+        discount: { kind: "prozent", value: 500 },
+        paymentPlan: [
+          { label: "Anzahlung", share: { kind: "prozent", value: 3000 }, due: "Auftragserteilung" },
+          { label: "Rest", share: { kind: "rest" }, due: "Abnahme" },
+        ],
+      }) as never,
+    );
+    const copy = await quotes.copyQuote(actor, vorlage.id, "2026-12-01");
+    expect(copy).toMatchObject({
+      status: "draft",
+      issueDate: "2026-12-01",
+      validUntil: "2026-12-31",
+      intro: "Wartungspaket",
+      net: vorlage.net,
+      discountPercent: 500,
+      paymentPlan: vorlage.paymentPlan,
+    });
+    expect((await quotes.getQuote(copy.id))!.lines.map((l) => [l.kind, l.unitPrice, l.quantity])).toEqual([
+      [null, 9500, 40_000],
+      ["alternative", 8500, 40_000],
+      ["optional", 5000, 1000],
+    ]);
+    expect((await quotes.getQuote(vorlage.id))!.quote).toMatchObject({ status: "draft", issueDate: "2026-10-01", intro: "Wartungspaket" });
   });
 });

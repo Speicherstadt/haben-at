@@ -22,6 +22,7 @@ import { formatDate, formatDateTime, formatLongDate } from "../../../lib/format.
 import { useAction } from "../../../lib/use-action.ts";
 import { getLsta, saveLstaTurnusFn, submitLstaFn } from "../../../server/functions/lsta.ts";
 import { Field } from "../../../components/Field.tsx";
+import { useFokusUeberWechsel } from "../../../lib/use-fokus-ueber-wechsel.ts";
 
 export const Route = createFileRoute("/_app/lohn/anmeldung/$zeitraum")({
   loader: ({ params }) => {
@@ -39,6 +40,8 @@ type Data = Awaited<ReturnType<typeof getLsta>>;
 function LstaPage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  // Die Auswahl behält beim Wechsel den Fokus, obwohl die Seite neu entsteht
+  const auswahl = useFokusUeberWechsel<HTMLSelectElement>("lsta-zeitraum");
   const options = data.zeitraeume.some((z) => z.key === data.key) ? data.zeitraeume : [...data.zeitraeume, { ...data.zeitraum, key: data.key }];
 
   return (
@@ -50,7 +53,15 @@ function LstaPage() {
         </div>
         <Field label="Zeitraum">
           {(control) => (
-            <select {...control} value={data.key} onChange={(event) => navigate({ to: "/lohn/anmeldung/$zeitraum", params: { zeitraum: event.target.value } })}>
+            <select
+              {...control}
+              ref={auswahl.ref}
+              value={data.key}
+              onChange={(event) => {
+                auswahl.merken();
+                void navigate({ to: "/lohn/anmeldung/$zeitraum", params: { zeitraum: event.target.value } });
+              }}
+            >
               {options.map((option) => (
                 <option key={option.key} value={option.key}>
                   {lstaLabel(option)}

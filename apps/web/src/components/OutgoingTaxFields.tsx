@@ -1,5 +1,7 @@
-import { outgoingTaxIssues, section4Note, TAX_TREATMENTS, type OutgoingTaxDetails, type TaxTreatment } from "@haben/core";
+import { outgoingTaxIssues, section4Note, TAX_TREATMENTS, vatTerritory, type OutgoingTaxDetails, type TaxTreatment } from "@haben/core";
+import { useId } from "react";
 import { Field } from "./Field.tsx";
+import { VatTerritoryHint } from "./VatTerritoryHint.tsx";
 
 export const EMPTY_DETAILS: OutgoingTaxDetails = { exemption: null, ancillary: null, foreignPlace: null, assetDisposal: false };
 const KU_TREATMENTS: TaxTreatment[] = ["kleinunternehmer", "steuerfrei", "reverse_charge", "drittland", "eu_sonstige"];
@@ -12,6 +14,7 @@ interface TaxFieldsProps {
   disabled?: boolean;
   error?: string;
   reasonError?: string;
+  describedBy?: string | undefined;
   onTreatmentChange: (value: TaxTreatment) => void;
   onDetailsChange: (value: OutgoingTaxDetails) => void;
   onReasonChange: (value: string) => void;
@@ -33,6 +36,7 @@ export function OutgoingTaxFields(props: TaxFieldsProps) {
     disabled = false,
     error,
     reasonError,
+    describedBy,
     onTreatmentChange,
     onDetailsChange,
     onReasonChange,
@@ -54,7 +58,7 @@ export function OutgoingTaxFields(props: TaxFieldsProps) {
 
   return (
     <div className="stack" style={{ gridColumn: "1 / -1" }}>
-      <Field label="Umsatzsteuer" hint={treatmentHint(treatment, kleinunternehmer)} error={error}>
+      <Field label="Umsatzsteuer" hint={treatmentHint(treatment, kleinunternehmer)} error={error} describedBy={describedBy}>
         {(control) => (
           <select {...control} value={treatment} disabled={disabled} onChange={(event) => chooseTreatment(event.target.value as TaxTreatment)}>
             {(Object.keys(TAX_TREATMENTS) as TaxTreatment[])
@@ -157,10 +161,15 @@ export function ForeignTaxFields({
   kleinunternehmer,
 }: DetailsProps & Pick<TaxFieldsProps, "treatment" | "kleinunternehmer">) {
   const required = kleinunternehmer || treatment === "eu_sonstige";
+  const hintId = useId();
+  const hasPostalCode = ["DE", "ES", "IT", "GR"].includes(values.foreignPlace?.country ?? "");
+  const territory = vatTerritory(values.foreignPlace?.country, values.foreignPlace?.postalCode);
+  const describedBy = hasPostalCode && territory ? hintId : undefined;
   return (
     <>
       <Field
         label="Land des tatsächlichen Leistungsorts"
+        describedBy={describedBy}
         hint="Ländercode, z. B. AT oder CH. Der Leistungsort folgt der Leistung; die Kundenanschrift allein genügt nicht (§ 3a UStG)."
       >
         {(control) => (
@@ -176,6 +185,26 @@ export function ForeignTaxFields({
           />
         )}
       </Field>
+      {hasPostalCode && (
+        <>
+          <Field
+            label="PLZ des tatsächlichen Leistungsorts (optional)"
+            describedBy={describedBy}
+            hint="Bei einem umsatzsteuerlichen Sondergebiet selbst eintragen. Die Kundenanschrift wird nicht übernommen; danach die ausländische Behandlung erneut bestätigen."
+          >
+            {(control) => (
+              <input
+                {...control}
+                value={values.foreignPlace?.postalCode ?? ""}
+                onChange={(event) => update({ foreignPlace: { country: values.foreignPlace!.country, postalCode: event.target.value, noForeignVat: false } })}
+                maxLength={20}
+                disabled={disabled}
+              />
+            )}
+          </Field>
+          <VatTerritoryHint id={hintId} country={values.foreignPlace?.country} postalCode={values.foreignPlace?.postalCode} />
+        </>
+      )}
       <Field
         label="Ausländische Umsatzsteuer"
         hint="Leistungsort und ausländische Behandlung sind geprüft. Ausländische Steuersätze, OSS und das besondere EU-Kleinunternehmerverfahren sind nicht enthalten."
@@ -185,8 +214,12 @@ export function ForeignTaxFields({
             {...control}
             value={values.foreignPlace?.noForeignVat ? "bestaetigt" : ""}
             disabled={disabled}
-            required={required}
-            onChange={(event) => update({ foreignPlace: { country: values.foreignPlace?.country ?? "", noForeignVat: event.target.value === "bestaetigt" } })}
+            required={required || (treatment === "drittland" && Boolean(territory))}
+            onChange={(event) =>
+              update({
+                foreignPlace: { ...values.foreignPlace, country: values.foreignPlace?.country ?? "", noForeignVat: event.target.value === "bestaetigt" },
+              })
+            }
           >
             <option value="">Behandlung noch nicht bestätigt</option>
             <option value="bestaetigt">Geprüft: keine ausländische Umsatzsteuer auszuweisen</option>

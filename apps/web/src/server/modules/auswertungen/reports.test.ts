@@ -168,7 +168,14 @@ describe.skipIf(!testDatabaseUrl)("Auswertungen (Postgres)", () => {
     await bank.allocate(actor, { kind: "invoice", transactionId: tx(200_000), invoiceId: invoice.id, amount: 100_000 });
     const [wrong] = await sql`select id from allocations`;
     await bank.reverseAllocation(actor, wrong!.id, "2026-10-01");
-    await bank.allocate(actor, { kind: "invoice", transactionId: tx(200_000), invoiceId: invoice.id, amount: 200_000 });
+    // Der aufgehobene Teil bezieht sich auf seine Aufhebung, der nie zugeordnete Rest steht für sich (#1454)
+    await bank.allocateSplit(actor, {
+      transactionId: tx(200_000),
+      parts: [
+        { kind: "invoice", invoiceId: invoice.id, amount: 100_000, reassignsId: wrong!.id as string },
+        { kind: "invoice", invoiceId: invoice.id, amount: 100_000, reassignsId: null },
+      ],
+    });
     await bank.allocate(actor, { kind: "document", transactionId: tx(-4590), documentId: telekom, amount: -4590 });
     await bank.allocate(actor, { kind: "ustVorauszahlung", transactionId: tx(-50_000), amount: -50_000 });
     await bank.allocate(actor, { kind: "gebuehren", transactionId: tx(-990), amount: -990 });

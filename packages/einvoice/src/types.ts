@@ -1,4 +1,16 @@
-import type { BasisPoints, Cents, Discount, InvoiceTotals, LegalInfo, LetterheadOptions, Millis, PriceMode, SkontoStufe, TaxTreatment } from "@haben/core";
+import type {
+  BasisPoints,
+  Cents,
+  Discount,
+  InvoiceTotals,
+  LegalInfo,
+  LetterheadOptions,
+  Millis,
+  OutgoingTaxDetails,
+  PriceMode,
+  SkontoStufe,
+  TaxTreatment,
+} from "@haben/core";
 
 /** Rechnung, Stornorechnung oder Rechnungskorrektur (Gutschrift) */
 export type InvoiceKind = "rechnung" | "storno" | "korrektur";
@@ -175,6 +187,8 @@ export interface InvoiceDocument extends Letterhead {
   propertyRetention?: boolean;
   /** Fehlt = regulär besteuert */
   taxTreatment?: TaxTreatment;
+  /** Ausdrücklich bestätigter tatsächlicher Leistungsort, nur für die Prüfung; kein Druckfeld. */
+  foreignPlace?: OutgoingTaxDetails["foreignPlace"];
   /** Fehlt = Nettopreise; brutto nur bei regulärer Besteuerung */
   priceMode?: PriceMode;
   /** Befreiungsgrund auf der Rechnung, z. B. „Steuerfrei nach § 4 Nr. 14 UStG“; sonst der Standardtext */

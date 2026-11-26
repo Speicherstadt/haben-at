@@ -15,8 +15,9 @@ const MIGRATIONS = fileURLToPath(new URL("../../../drizzle", import.meta.url));
  */
 describe.skipIf(!testDatabaseUrl)("Migration 0298: Bankdubletten auf bestehenden Umsätzen (Postgres)", () => {
   let sql: postgres.Sql;
-  const stand = () => sql`select md5(string_agg(t::text, '|' order by t.id)) as umsaetze,
-      (select md5(string_agg(a::text, '|' order by a.id)) from allocations a) as zuordnungen
+  // Ohne leere Felder: Spätere Migrationen fügen Spalten hinzu, die bei bestehenden Zeilen leer bleiben
+  const stand = () => sql`select md5(string_agg(jsonb_strip_nulls(to_jsonb(t))::text, '|' order by t.id)) as umsaetze,
+      (select md5(string_agg(jsonb_strip_nulls(to_jsonb(a))::text, '|' order by a.id)) from allocations a) as zuordnungen
     from bank_transactions t`;
 
   beforeAll(async () => {

@@ -32,6 +32,7 @@ import { steuerangabeSchema, steuerbuchung } from "./steuerzahlung.ts";
 import { darlehenBuchung, loanPartSchema } from "./darlehen.ts";
 import { aufladungBuchung, kategorieAngabeSchema, kategoriebuchung } from "./direkt-kategorie.ts";
 import { documentBooking, invoiceBooking, type LockedTransaction, lockTransaction, returnBooking, type Zuordnungsziel } from "./payment-booking.ts";
+import { reassignmentSource } from "./allocation-reassignment.ts";
 
 /**
  * Buchungszeilen eines Umsatzes auf das richtige Geldkonto: Bank (1200/1800) bzw. beim Zahlungsdienstleister dessen
@@ -90,7 +91,9 @@ async function assertLohnOffen(tx: Tx, kind: LohnZahlung, amount: Cents, kontenr
   );
 }
 
-export const allocationSchema = z.discriminatedUnion("kind", [
+const reassignmentSchema = z.object({ reassignsId: z.uuid().nullish() });
+
+const allocationTargetSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal("invoice"), transactionId: z.uuid(), invoiceId: z.uuid(), amount: inCents(z.number().int()) }),
   z.object({ kind: z.literal("document"), transactionId: z.uuid(), documentId: z.uuid(), amount: inCents(z.number().int()) }),
   // Zahllast oder Erstattung einer abgegebenen Voranmeldung: gebucht wie „Umsatzsteuer an das Finanzamt“, mit Bezug
@@ -110,18 +113,21 @@ export const allocationSchema = z.discriminatedUnion("kind", [
   z.object({ kind: z.literal(AUFLADUNG_KIND), transactionId: z.uuid(), amount: inCents(z.number().int()), kategorie: kategorieAngabeSchema }),
 ]);
 
+export const allocationSchema = allocationTargetSchema.and(reassignmentSchema);
 export type AllocationInput = z.infer<typeof allocationSchema>;
 
 /** Ein Teil einer Aufteilung: Ziel und Betrag, Vorzeichen wie auf dem Konto (Gebühr in einer Auszahlung also negativ) */
-const splitPartSchema = z.discriminatedUnion("kind", [
-  z.object({ kind: z.literal("invoice"), invoiceId: z.uuid(), amount: inCents(z.number().int()) }),
-  z.object({ kind: z.literal("document"), documentId: z.uuid(), amount: inCents(z.number().int()) }),
-  z.object({ kind: z.literal("ustva"), vatReturnId: z.uuid(), amount: inCents(z.number().int()) }),
-  z.object({ kind: z.enum(DIRECT_KINDS), amount: inCents(z.number().int()) }),
-  z.object({ kind: z.literal("steuer"), amount: inCents(z.number().int()), steuer: steuerangabeSchema }),
-  z.object({ kind: z.literal("darlehen"), amount: inCents(z.number().int()), darlehen: loanPartSchema }),
-  z.object({ kind: z.literal("kategorie"), amount: inCents(z.number().int()), kategorie: kategorieAngabeSchema }),
-]);
+const splitPartSchema = z
+  .discriminatedUnion("kind", [
+    z.object({ kind: z.literal("invoice"), invoiceId: z.uuid(), amount: inCents(z.number().int()) }),
+    z.object({ kind: z.literal("document"), documentId: z.uuid(), amount: inCents(z.number().int()) }),
+    z.object({ kind: z.literal("ustva"), vatReturnId: z.uuid(), amount: inCents(z.number().int()) }),
+    z.object({ kind: z.enum(DIRECT_KINDS), amount: inCents(z.number().int()) }),
+    z.object({ kind: z.literal("steuer"), amount: inCents(z.number().int()), steuer: steuerangabeSchema }),
+    z.object({ kind: z.literal("darlehen"), amount: inCents(z.number().int()), darlehen: loanPartSchema }),
+    z.object({ kind: z.literal("kategorie"), amount: inCents(z.number().int()), kategorie: kategorieAngabeSchema }),
+  ])
+  .and(reassignmentSchema);
 
 export const splitSchema = z.object({ transactionId: z.uuid(), parts: z.array(splitPartSchema).min(2).max(20) });
 
@@ -148,12 +154,20 @@ const AUFLADUNG_NICHT_BUCHBAR =
  * Bucht einen Teil eines Umsatzes auf Rechnung, Beleg oder eine Buchung ohne Beleg. Der Betrag trägt das Vorzeichen,
  * mit dem er das Konto bewegt; geprüft wird hier nur gegen das Ziel (offener Betrag der Rechnung bzw. des Belegs).
  */
-export async function bookPart(tx: Tx, company: Awaited<ReturnType<typeof openBooks>>, bank: LockedTransaction, part: Part, splitId: string | null) {
+export async function bookPart(
+  tx: Tx,
+  company: Awaited<ReturnType<typeof openBooks>>,
+  bank: LockedTransaction,
+  part: Part & z.infer<typeof reassignmentSchema>,
+  splitId: string | null,
+) {
   // Gebühren, Zinserträge, Privat und Geldtransit ergeben auf einem privaten Konto keinen Geschäftsvorfall (#873)
   if (!aufKontoAngeboten(part.kind, bank.purpose)) throw new BankError(PRIVAT_NICHT_BUCHBAR);
   // Eine Aufladung gibt es nur im Einzelunternehmen (#1356): Eine Gesellschaft mit Bilanz weist den Betrag bis zur
   // Rechnung als Forderung aus (§ 246 Abs. 1 HGB), nicht als Aufwand; die Auswahl bietet sie dort auch nicht an
   if (!aufRechtsformAngeboten(part.kind, company.rechtsform)) throw new BankError(AUFLADUNG_NICHT_BUCHBAR);
+  const source = await reassignmentSource(tx, bank.id, part.amount, part.reassignsId);
+  const date = source?.date ?? bank.bookingDate;
   let lines: PostingLine[];
   let description: string;
   let target: Zuordnungsziel = {};
@@ -163,7 +177,7 @@ export async function bookPart(tx: Tx, company: Awaited<ReturnType<typeof openBo
   } else if (part.kind === "ruecklastschrift") {
     ({ lines, description, target } = await returnBooking(tx, company, bank, part));
   } else if (part.kind === "document") {
-    ({ lines, description, target } = await documentBooking(tx, company, bank, part));
+    ({ lines, description, target } = await documentBooking(tx, company, part, date));
   } else if (part.kind === "ustva") {
     // Buchung wie „Umsatzsteuer an das Finanzamt“ (SKR03 1780, SKR04 3820); neu ist nur der Bezug auf die Voranmeldung
     const label = await assertUstvaOffen(tx, part.vatReturnId, part.amount);
@@ -196,9 +210,17 @@ export async function bookPart(tx: Tx, company: Awaited<ReturnType<typeof openBo
   if (bank.purpose === "privat") lines = privatKontoPosting(lines, part.amount, company.kontenrahmen, company.rechtsform);
 
   const kind = part.kind === "ustva" ? "ustVorauszahlung" : part.kind === "ruecklastschrift" ? "invoice" : part.kind;
-  const [allocation] = await insertAllocation(tx, { transactionId: bank.id, kind, amount: part.amount, splitId, ...target });
+  const [allocation] = await insertAllocation(tx, {
+    transactionId: bank.id,
+    kind,
+    amount: part.amount,
+    splitId,
+    date: source?.date,
+    reassignsId: source?.id,
+    ...target,
+  });
   await post(tx, company, {
-    date: bank.bookingDate,
+    date,
     description,
     sourceType: "allocation",
     sourceId: allocation!.id,
@@ -206,7 +228,8 @@ export async function bookPart(tx: Tx, company: Awaited<ReturnType<typeof openBo
   });
   // Zahlung vor der Ausführung (#693): Die vorausdatierte Freigabe zurücknehmen, den Rest wieder festschreiben —
   // nach der Buchung, damit der gezogene Anteil im Journal steht und der Saldo den Rest zeigt
-  if (part.kind === "document") await freigabeNachziehen(tx, part.documentId, company, bank.bookingDate);
+  if (part.kind === "document") await freigabeNachziehen(tx, part.documentId, company, date);
+  return date;
 }
 
 /** Ordnet (einen Teil) eines Umsatzes zu und bucht die Zahlung. */

@@ -50,6 +50,8 @@ export function validateForFormat(doc: InvoiceDocument): string[] {
       sellerUstId: seller.ustId,
       buyerUstId: buyer.ustId,
       buyerCountry: buyer.land,
+      buyerPostalCode: buyer.plz,
+      foreignPlace: doc.foreignPlace,
       exemptionReason: doc.exemptionReason,
       correctsInvoice: isCreditNote(doc),
     }),

@@ -3,6 +3,14 @@ import { validateForFormat } from "./validate.ts";
 import { sampleDocument, sampleSeller } from "./samples.ts";
 
 describe("validateForFormat", () => {
+  it("prüft eine Drittlandleistung am ausdrücklich bestätigten tatsächlichen Ort statt am Berliner Kundensitz", () => {
+    const doc = sampleDocument({ taxTreatment: "drittland" });
+    const actual = { foreignPlace: { country: "DE", postalCode: "27498", noForeignVat: true } };
+    expect(
+      validateForFormat({ ...doc, ...actual, buyer: { ...doc.buyer, land: "DE", plz: "10115" }, lines: doc.lines.map((line) => ({ ...line, taxRate: 0 })) }),
+    ).toEqual([]);
+  });
+
   it("akzeptiert vollständige Rechnungen in allen Formaten", () => {
     for (const format of ["zugferd", "xrechnung-cii", "xrechnung-ubl"] as const) {
       expect(validateForFormat(sampleDocument({ format }))).toEqual([]);

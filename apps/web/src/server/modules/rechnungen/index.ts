@@ -95,6 +95,7 @@ export { confirmationPdf, deliveryNotePdf, OrderDocumentError } from "./order-do
 export { DocumentPreviewError, documentPreview, documentPreviewSchema, type DocumentPreview, type DocumentPreviewInput } from "./document-preview.ts";
 export { DraftPdfError, invoiceDraftPdf, quoteDraftPdf } from "./draft-pdf.ts";
 export { QuoteChoiceError } from "./quote-choices.ts";
+export { quoteDraftInputOf } from "./quote-draft-input.ts";
 export { abschlagFromPlan, PlanError, quotePlanOverview, type PlanRowOverview } from "./quote-plan.ts";
 export {
   copyQuote,

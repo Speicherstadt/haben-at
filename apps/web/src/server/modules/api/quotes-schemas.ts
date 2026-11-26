@@ -1,13 +1,69 @@
-import { inCents, QUOTE_LINE_KINDS, type QuoteListStatus } from "@haben/core";
+import { inCents, QUOTE_LINE_KINDS, QUOTE_VALID_DAYS, type QuoteListStatus } from "@haben/core";
 import { z } from "zod";
-import { CENTS, invoiceSchema, isoDate, page, pageQuery, responseSchemas, timestamp } from "./schemas.ts";
+import { quoteDraftSchema } from "../rechnungen/index.ts";
+import { CENTS, invoiceSchema, isoDate, lineInputSchema, optional, page, pageQuery, requestSchemas, responseSchemas, timestamp } from "./schemas.ts";
 
 /*
- * Schemas der REST-API für Angebote (#297), nur zum Lesen. Positionen, Steuerangaben und Referenzen beschreibt sie wie bei
- * der Rechnung. Rabatte stecken wie dort in net und gross; einzeln weist die API sie nicht aus.
+ * Schemas der REST-API für Angebote (#297): lesen, Entwürfe anlegen und ändern. Positionen, Steuerangaben und Referenzen
+ * beschreibt sie wie bei der Rechnung. Rabatte und Zahlungsplan setzt wie bei der Rechnung nur die Oberfläche; sie stecken
+ * in net und gross, einzeln weist die API sie nicht aus.
  */
 
 const invoiceFields = invoiceSchema.shape;
+const quoteFields = quoteDraftSchema.shape;
+
+// ── Eingaben ──────────────────────────────────────────────────────────────────
+
+const quoteLineInputSchema = lineInputSchema
+  .extend({
+    kind: quoteFields.lines.element.shape.kind.describe(
+      "optional = optionale Position, alternative = Alternative zur Hauptposition direkt darüber; beide zählen nicht zur Summe. Fehlt = normale Position",
+    ),
+  })
+  .strict()
+  .register(requestSchemas, { id: "QuoteLineInput" });
+
+/**
+ * Felder eines Entwurfs, die die API annimmt; Rabatte, Zahlungsplan und Ansprechpartner bleiben der Oberfläche vorbehalten.
+ * Ohne die Vorgaben aus quoteDraftSchema (removeDefault): Beim Anlegen setzt der Server eigene (Textbausteine, Firmendaten,
+ * Sprache des Kontakts), beim Ändern bleibt ein ungenanntes Feld stehen. Als default in der OpenAPI-Beschreibung stimmten sie
+ * nicht, und ein Client, der sie mitschickt, setzte den Entwurf zurück.
+ */
+const quoteDraftApiFields = {
+  contactId: quoteFields.contactId.describe("Kontakt aus /kontakte mit der Rolle Kunde; null = noch ohne Kunde"),
+  issueDate: quoteFields.issueDate.describe("Angebotsdatum JJJJ-MM-TT, Vorgabe heute"),
+  validUntil: quoteFields.validUntil.describe(`Gültig bis einschließlich, JJJJ-MM-TT; Vorgabe ${QUOTE_VALID_DAYS} Tage nach dem Angebotsdatum`),
+  serviceFrom: quoteFields.serviceFrom,
+  serviceTo: quoteFields.serviceTo,
+  intro: quoteFields.intro.removeDefault().describe("Kopftext über den Positionen, Vorgabe: Standard-Kopftext für Angebote aus den Textbausteinen"),
+  note: quoteFields.note.describe("Fußtext unter den Summen, Vorgabe: Standard-Fußtext für Angebote aus den Textbausteinen"),
+  buyerOrderReference: quoteFields.buyerOrderReference
+    .removeDefault()
+    .describe("Bestellnummer des Kunden, geht in die Rechnung aus dem Angebot über; leer = keine"),
+  sellerOrderReference: quoteFields.sellerOrderReference
+    .removeDefault()
+    .describe("Eigene Auftragsnummer, geht in die Rechnung aus dem Angebot über; leer = keine"),
+  despatchAdviceReference: quoteFields.despatchAdviceReference
+    .removeDefault()
+    .describe("Lieferscheinnummer, geht in die Rechnung aus dem Angebot über; leer = keine"),
+  taxTreatment: quoteFields.taxTreatment.removeDefault().describe("Umsatzsteuer des Angebots, Vorgabe aus den Firmendaten"),
+  exemptionReason: quoteFields.exemptionReason.removeDefault(),
+  // Die Beschreibung hängt an der Vorgabe; removeDefault gibt das Schema darunter zurück
+  taxDetails: quoteFields.taxDetails.removeDefault().describe(quoteFields.taxDetails.description!),
+  priceMode: quoteFields.priceMode.removeDefault().describe("Einzelpreise netto oder brutto inkl. USt, Vorgabe netto"),
+  language: quoteFields.language.removeDefault().describe("Sprache des PDFs, Vorgabe die des Kontakts"),
+  lines: z.array(quoteLineInputSchema).min(1, "Mindestens eine Position").max(200),
+};
+
+export const quoteDraftCreateSchema = z
+  .object({ ...optional(quoteDraftApiFields), lines: quoteDraftApiFields.lines })
+  .strict()
+  .register(requestSchemas, { id: "QuoteDraftCreate" });
+
+/** Änderung eines Entwurfs: nur die genannten Felder; lines ersetzt alle Positionen */
+export const quoteDraftPatchSchema = z.object(optional(quoteDraftApiFields)).strict().register(requestSchemas, { id: "QuoteDraftPatch" });
+
+// ── Antworten ─────────────────────────────────────────────────────────────────
 
 /** Stand wie in der Angebotsliste von Haben; satisfies hält die Liste beim Typ aus @haben/core (lebenszyklus.ts) */
 const LIST_STATUS = ["entwurf", "offen", "abgelaufen", "angenommen", "abgelehnt", "abgerechnet"] as const satisfies readonly QuoteListStatus[];

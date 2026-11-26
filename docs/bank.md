@@ -83,6 +83,7 @@ Danach steht unter dem Konto die Quelle mit Stichtag und bis wann geliefert ist;
 | Shopify Payments | Transaktionsexport mit Payout ID, Payout Date, Amount, Fee, Net | nein, wie oben | wie oben |
 | eBay | Transaktionsbericht (CSV), Spalten deutsch (Datum der Transaktionserstellung, Typ, Nettobetrag, Auszahlung Nr.) oder englisch (Transaction creation date, Type, Net amount, Payout ID) | nein, wie oben | wie oben |
 | Etsy | Monatsabrechnung (CSV), Spalten deutsch (Datum, Art, Titel, Info, Betrag, Gebühren & Steuern, Netto) oder englisch (Date, Type, Title, Info, Amount, Fees & Taxes, Net) | nein, wie oben | wie oben |
+| Amazon | Abrechnung (Settlement Report, Format V2), Tab-getrennt, je Marktplatz und Zeitraum: die erste Datenzeile ist die Zusammenfassung mit dem Auszahlungsbetrag, darunter eine Zeile je Position (transaction-type, amount-type, amount-description, amount); Beträge deutsch („6,49“) oder englisch („6.49“); das Amazon-Konto ist auf einen Marktplatz festgelegt, ein Report eines anderen wird abgelehnt | nein, wie oben | wie oben |
 | Andere Bank (CSV) | Jede andere CSV mit Kopfzeile; die Spalten ordnest du einmal selbst zu ([Andere Banken](bank-spaltenzuordnung.md)) | nein | nein |
 
 Bank und Format erkennt Haben am Inhalt, nicht am Dateinamen. CAMT.052 und CAMT.054 werden mit einer eigenen Meldung abgelehnt; nur der Tagesauszug CAMT.053 wird gelesen.
@@ -193,6 +194,12 @@ Importe, Umsätze, Zuordnungen und [Verrechnungen](#gegenläufige-umsätze-verre
 Ab zwei Konten zeigt der erste Reiter, **Alle Konten**, die Umsätze aller Konten in einer Liste, unter der Gegenpartei mit dem Namen des Kontos. Dorthin führt auch **Alle anzeigen** bei den Bankumsätzen der [Schnellsuche](suche.md).
 
 Die Filter **Alle**, **Offen** (mit Anzahl), **Zugeordnet** (auch verrechnete Umsätze) und **Vorschlag** schränken die Liste ein. **Vorschlag** zeigt nur Umsätze mit dem gleichnamigen Status. Das Suchfeld findet dieselben Umsätze wie die [Schnellsuche](suche.md#was-sie-findet), dazu Beträge, deren Zahl die Eingabe enthält: `19.9` findet 19,90 €. Angezeigt werden höchstens 500 Treffer.
+
+Über der Liste steht, wie viele Umsätze noch offen sind: dieselbe Zahl wie am Filter **Offen**, für das gewählte Konto bzw. alle Konten, unabhängig von Suche und Filter. Teilweise zugeordnete Umsätze zählen mit, [gekennzeichnete private](#privates-konto-umsätze-ohne-buchungsart) nicht, bei einem Zahlungsdienstleister Zahlung und Gebühr zusammen einmal.
+
+- **Nächsten offenen** wählt den nächsten offenen Umsatz der Liste, am Ende wieder von vorn, und setzt den Fokus auf seine Zeile.
+- Steht kein weiterer offener Umsatz in der Liste (anderer Filter oder Suche), zeigt der Knopf alle offenen Umsätze ohne Suche, ohne den Fokus zu setzen. Zeigt die Liste schon alle offenen und ist nur einer offen, fehlt der Knopf.
+- Ist alles zugeordnet, steht dort „Alles zugeordnet.“ mit den Links **Belege prüfen** und, außer bei Kleinunternehmern, **Voranmeldung prüfen**. Ohne importierte Umsätze steht stattdessen „Keine Umsätze.“.
 
 Die Spaltenköpfe Datum, Gegenpartei · Verwendungszweck, Betrag und Status sortieren die Liste. Der erste Klick sortiert absteigend, ein zweiter Klick auf denselben Kopf dreht die Richtung; der aktive Kopf zeigt einen Pfeil. Ohne Auswahl steht der neueste Umsatz oben. Am Handy sind Datum und Status ausgeblendet, dort sortieren Gegenpartei und Betrag.
 
@@ -506,7 +513,7 @@ Im Einzelunternehmen ist die einbehaltene Steuer eine Entnahme, angerechnet wird
 
 ## Zahlungsdienstleister
 
-<a id="google-play-und-app-store"></a>Konten bei PayPal, Stripe, Shopify Payments, eBay, Etsy, SumUp, Google Play und App Store stehen unter [Zahlungsdienstleister](bank-zahlungsdienstleister.md).
+<a id="google-play-und-app-store"></a>Konten bei PayPal, Stripe, Shopify Payments, eBay, Etsy, Amazon, SumUp, Google Play und App Store stehen unter [Zahlungsdienstleister](bank-zahlungsdienstleister.md).
 
 ## Buchungen
 
@@ -566,7 +573,7 @@ Unter **Zugeordnet** steht neben jeder Zuordnung **Aufheben**, bei einer Aufteil
 
 Eine Zuordnung lässt sich nur einmal aufheben.
 
-Der Tag der Aufhebung darf nicht in der Zukunft liegen. Als Untergrenze gilt das Buchungsdatum der Zahlung, bei einem künftigen Buchungsdatum heute. Änderbar bleibt der vorbelegte Tag in jedem Fall.
+Der Tag der Aufhebung darf nicht in der Zukunft liegen. Als Untergrenze gilt der Tag, an dem die Zuordnung wirksam wurde, bei einem künftigen Buchungsdatum heute. Änderbar bleibt der vorbelegte Tag in jedem Fall.
 
 Eine Aufhebung in einem schon gemeldeten Zeitraum bleibt erlaubt. Die Gegenbuchung wirkt an ihrem Tag, die abgegebene Voranmeldung ändert sich nicht nachträglich.
 
@@ -576,7 +583,9 @@ Zwei Fälle sind zu unterscheiden.
 
 **Die Bemessungsgrundlage ändert sich nachträglich**, etwa durch Rückzahlung, Storno oder Ausfall. Dann greift [§ 17 Abs. 1 UStG](https://www.gesetze-im-internet.de/ustg_1980/__17.html), und die Berichtigung gehört in den Zeitraum, in dem die Änderung eintritt. Dafür ist der Tag der Aufhebung richtig.
 
-**Die Zuordnung war von Anfang an falsch**, etwa auf die falsche Rechnung oder ohne jede Kundenzahlung. Das ist keine Änderung der Bemessungsgrundlage, sondern die Berichtigung eines Erfassungsfehlers. Bei Ist-Versteuerung entsteht die Steuer mit der Vereinnahmung ([§ 13 Abs. 1 Nr. 1 Buchstabe b UStG](https://www.gesetze-im-internet.de/ustg_1980/__13.html)), also gehört die Korrektur in den Monat der Zahlung; ist die Anmeldung dafür schon abgegeben, wird sie nach [§ 153 Abs. 1 AO](https://www.gesetze-im-internet.de/ao_1977/__153.html) berichtigt. Dafür den Tag der Zahlung wählen. Wer im Juli eine März-Zahlung von Rechnung A auf B umhängt und dabei den Tag der Aufhebung nimmt, bekommt B im März und die Gegenzeile von A im Juli — bis dahin stehen die März-Umsatzsteuer und das Bankkonto doppelt.
+**Die Zuordnung war von Anfang an falsch**, etwa auf die falsche Rechnung oder ohne jede Kundenzahlung. Bei Ist-Versteuerung entsteht die Steuer mit der Vereinnahmung ([§ 13 Abs. 1 Nr. 1 Buchstabe b UStG](https://www.gesetze-im-internet.de/ustg_1980/__13.html)). Soll die Berichtigung unmittelbar im Monat der Zahlung wirken, wähle bei der Aufhebung den Tag der Zahlung. Bei einer bereits abgegebenen fehlerhaften Anmeldung gilt [§ 153 Abs. 1 AO](https://www.gesetze-im-internet.de/ao_1977/__153.html).
+
+Ordne einen aufgehobenen Betrag unter **Aufgehobene Zuordnung** erneut zu. Haben übernimmt den Tag der Aufhebung für die neue Buchung und speichert ihren Bezug. Stehen mehrere aufgehobene Teile zur Wahl, wähle für jeden Betrag den passenden Teil. Das geht über **Aufteilen** und auch bei einem separaten Rest als Gebühr oder Kursdifferenz. Einen bisher freien Teil buchst du über **Noch nie zugeordnet** zum Buchungstag des Umsatzes. Die ursprüngliche Zuordnung, ihre Aufhebung und die neue Zuordnung bleiben nachvollziehbar. Wird eine März-Zahlung im Juli aufgehoben und erneut derselben Leistung zugeordnet, gleichen sich die beiden Juli-Buchungen aus.
 
 Beim [Stornieren eines Belegs](belege.md#stornieren-und-neu-erfassen) kann Haben dessen Bankzuordnungen in derselben bestätigten Aktion aufheben. Die Rückfrage nennt die Zuordnungen einschließlich aller Teile betroffener Aufteilungen. Mit der Zahlung verknüpfte Ausbuchungen wie Skonto werden mit aufgehoben. Scheitert die Rücknahme oder der Belegstorno, wird keiner der beiden Teile gespeichert.
 
@@ -604,6 +613,6 @@ Einen einzelnen Umsatz ohne Gegenstück verrechnet Haben nicht: Was Geld bewegt,
 ## Grenzen
 
 - Automatischer Abruf über Enable Banking (PSD2) oder FinTS mit PIN/TAN; FinTS nur mit eigener Registrierungsnummer, ohne chipTAN optisch (Flickercode, dafür chipTAN manuell wählen) und ohne Kreditkarten. Ohne beides kommen die Umsätze per Datei.
-- Dateiimport mit eigenem Format für DKB, Commerzbank, BW-Bank, Deutsche Bank, Norisbank, Postbank, ING, C24, N26, Swan und CAMT.053; die CSV anderer Banken über eine [eigene Spaltenzuordnung](bank-spaltenzuordnung.md), ohne Salden. Zahlungsdienstleister: PayPal, Stripe, Shopify Payments, eBay und Etsy per CSV, [Etsy](bank-zahlungsdienstleister.md#etsy-zahlungsverlauf-über-die-api) auch per Abruf des Zahlungsverlaufs, [PayPal](bank-zahlungsdienstleister.md#paypal-umsätze-über-die-api) auch per Abruf der Transaktionen, [Stripe](bank-zahlungsdienstleister.md#stripe-umsätze-über-die-api) auch per Abruf der Umsätze, [Google Play und App Store](bank-zahlungsdienstleister.md#google-play-und-app-store) per Abruf der Finanzberichte; SumUp und andere lassen sich anlegen, aber noch nicht importieren.
+- Dateiimport mit eigenem Format für DKB, Commerzbank, BW-Bank, Deutsche Bank, Norisbank, Postbank, ING, C24, N26, Swan und CAMT.053; die CSV anderer Banken über eine [eigene Spaltenzuordnung](bank-spaltenzuordnung.md), ohne Salden. Zahlungsdienstleister: PayPal, Stripe, Shopify Payments, eBay, Etsy und Amazon per CSV, [Etsy](bank-zahlungsdienstleister.md#etsy-zahlungsverlauf-über-die-api) auch per Abruf des Zahlungsverlaufs, [PayPal](bank-zahlungsdienstleister.md#paypal-umsätze-über-die-api) auch per Abruf der Transaktionen, [Stripe](bank-zahlungsdienstleister.md#stripe-umsätze-über-die-api) auch per Abruf der Umsätze, [Google Play und App Store](bank-zahlungsdienstleister.md#google-play-und-app-store) per Abruf der Finanzberichte; SumUp und andere lassen sich anlegen, aber noch nicht importieren.
 - Zahlungsdienstleister nur in Euro; Zeilen in anderen Währungen (etwa ein USD-Guthaben bei PayPal) übernimmt Haben nicht und meldet sie. Ausnahme ist der App Store: Fremdwährung rechnet Haben mit dem Umsatzsteuer-Umrechnungskurs in Euro um (siehe [Google Play und App Store](bank-zahlungsdienstleister.md#google-play-und-app-store)).
 - Kursdifferenzen nur beim Ausgleich einer Rechnung oder eines Belegs in Fremdwährung; Bankkonten und Verrechnungskonten von Zahlungsdienstleistern nur in Euro.

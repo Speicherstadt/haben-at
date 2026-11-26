@@ -35,6 +35,10 @@ nav:
   - Start: index.md
   - Übersicht: ueberblick.md
   - Suchen: suche.md
+  - Gehostet:
+      - Gehostet oder mit Partner: gehostet.md
+      - AGB für Haben gehostet: gehostet-agb.md
+      - Auftragsverarbeitung für Haben gehostet: gehostet-avv.md
   - Betrieb:
       - Installation: installation.md
       - Compose-Generator: compose-generator.md
@@ -48,8 +52,8 @@ nav:
       - Anbindungen: installation-anbindungen.md
       - Single Sign-on: installation-sso.md
       - Backup und Updates: installation-backup.md
+      - Überwachung: installation-ueberwachung.md
       - Häufige Probleme: installation-probleme.md
-      - Gehostet oder mit Partner: gehostet.md
   - Einrichten:
       - Erste Schritte: einrichtung.md
       - Beleggestaltung: beleggestaltung.md
@@ -79,6 +83,7 @@ nav:
       - Steuerzahlungen und Darlehen: bank-steuern-darlehen.md
   - Steuern und Auswertungen:
       - Umsatzsteuer-Voranmeldung: umsatzsteuer.md
+      - Umsatzsteuerliche Sondergebiete: umsatzsteuer-sondergebiete.md
       - Jahreserklärungen: jahreserklaerung.md
       - Auswertungen und Jahresexport: auswertungen.md
       - BWA: bwa.md

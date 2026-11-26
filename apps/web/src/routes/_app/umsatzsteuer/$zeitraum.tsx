@@ -15,6 +15,7 @@ import type { PageData } from "./-zeitraum-quellen.tsx";
 import { type FieldKey, KennzahlenTabelle } from "./-zeitraum-kennzahlen.tsx";
 import { AbgabeSpalte, anmeldbar, useVoranmeldungAktionen } from "./-zeitraum-abgabe.tsx";
 import { ZeitraumHinweise } from "./-zeitraum-hinweise.tsx";
+import { useFokusUeberWechsel } from "../../../lib/use-fokus-ueber-wechsel.ts";
 
 export const Route = createFileRoute("/_app/umsatzsteuer/$zeitraum")({
   loader: ({ params }) => {
@@ -71,7 +72,6 @@ function seitGesendetGeaendert(gesendet: Figures, computed: Figures, data: PageD
   const vor1268 = computeUstva({ ...data.figures, kz48: data.figures.kz48 - data.figures.kz48Kleinunternehmer, kz39: data.kz39 });
   return !sameFigures(gesendet, computed, GESENDET_VERGLEICHEN) && !sameFigures(gesendet, vor1268, GESENDET_VERGLEICHEN);
 }
-type PeriodNotice = { key: string; notice: Notice };
 
 /** „Kz 81 1.000,00 €, Kz 86 0,00 € und Kz 66 12,00 €“; Kz 21/45/48 nur, wenn belegt */
 function describe(figures: Record<FieldKey, number>): string {
@@ -82,16 +82,15 @@ function describe(figures: Record<FieldKey, number>): string {
 function VatPeriodPage() {
   const data = Route.useLoaderData();
   const navigate = useNavigate();
+  // Die Auswahl behält beim Wechsel den Fokus, obwohl die Seite neu entsteht
+  const auswahl = useFokusUeberWechsel<HTMLSelectElement>("umsatzsteuer-zeitraum");
   const key = periodKey(data.period);
-  // Meldungen überleben das Neuaufsetzen des Formulars nach dem Speichern
-  // und gelten nur für den Zeitraum, in dem sie entstanden sind.
-  const [periodNotice, setPeriodNotice] = useState<PeriodNotice | null>(null);
-  const notice = periodNotice?.key === key ? periodNotice.notice : null;
-  const setNotice = (next: Notice) => setPeriodNotice({ key, notice: next });
-  // Passt der Zeitraum nicht zur Voranmeldung, lässt es sich dort beheben: dann steht der Bereich offen. Wie die Meldung gilt
-  // die Wahl nur für den Zeitraum, in dem sie entstand; der Zustand der Seite bleibt beim Wechsel des Zeitraums erhalten
-  const [fristen, setFristen] = useState<{ key: string; offen: boolean } | null>(null);
-  const fristenOffen = fristen?.key === key ? fristen.offen : Boolean(data.periodProblem);
+  // Meldungen überleben das Neuaufsetzen des Formulars nach dem Speichern; die Seite entsteht je Zeitraum neu
+  const [notice, setNotice] = useState<Notice>(null);
+  // Passt der Zeitraum nicht zur Voranmeldung, lässt es sich dort beheben: Bis man selbst auf- oder zuklappt, steht der
+  // Bereich dann offen. Wie die Meldung gilt die Wahl nur für diesen Zeitraum
+  const [fristen, setFristen] = useState<boolean | null>(null);
+  const fristenOffen = fristen ?? Boolean(data.periodProblem);
   // Zeiträume nach dem eingestellten Voranmeldungszeitraum, dazu der angezeigte, falls er nicht dazugehört
   const options = [...data.periods];
   if (!options.some((option) => periodKey(option) === key)) options.push(data.period);
@@ -108,7 +107,15 @@ function VatPeriodPage() {
         </div>
         <Field label="Zeitraum">
           {(control) => (
-            <select {...control} value={key} onChange={(event) => navigate({ to: "/umsatzsteuer/$zeitraum", params: { zeitraum: event.target.value } })}>
+            <select
+              {...control}
+              ref={auswahl.ref}
+              value={key}
+              onChange={(event) => {
+                auswahl.merken();
+                void navigate({ to: "/umsatzsteuer/$zeitraum", params: { zeitraum: event.target.value } });
+              }}
+            >
               {options.map((option) => (
                 <option key={periodKey(option)} value={periodKey(option)}>
                   {periodLabel(option)}
@@ -121,16 +128,10 @@ function VatPeriodPage() {
 
       <ZeitraumHinweise data={data} />
 
-      {/* key: Formular bei Zeitraum- oder Anmeldungswechsel neu aufsetzen */}
-      <VatReturnEditor key={`${key}-${data.current?.id ?? "neu"}-${data.current?.updatedAt ?? ""}`} data={data} notice={notice} setNotice={setNotice} />
+      {/* key: Formular bei Wechsel der Anmeldung (Berichtigung) und nach dem Speichern neu aufsetzen */}
+      <VatReturnEditor key={`${data.current?.id ?? "neu"}-${data.current?.updatedAt ?? ""}`} data={data} notice={notice} setNotice={setNotice} />
       {/* Außerhalb des Editors: der baut sich nach jedem Speichern der Anmeldung neu auf und verwürfe sonst die Auswahl hier */}
-      <FristenAbschnitt
-        frequency={data.frequency}
-        dauerfrist={data.dauerfrist}
-        setup={data}
-        offen={fristenOffen}
-        onOffen={(offen) => setFristen({ key, offen })}
-      />
+      <FristenAbschnitt frequency={data.frequency} dauerfrist={data.dauerfrist} setup={data} offen={fristenOffen} onOffen={setFristen} />
     </>
   );
 }

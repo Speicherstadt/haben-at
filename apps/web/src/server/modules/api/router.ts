@@ -1,5 +1,6 @@
 import { env } from "../../env.ts";
-import { INTERNAL_ERROR, userMessage } from "../../errors.ts";
+import { reportInternalError, userMessage } from "../../errors.ts";
+import { withLogComponent } from "../../log-kontext.ts";
 import { today } from "../../today.ts";
 import { authenticateMcp, hasScope, rateLimited, recordMcpCall, type McpAccess } from "../mcp/index.ts";
 import { fail, toResponse, type ApiRequest, type ApiResult } from "./http.ts";
@@ -120,8 +121,7 @@ async function runHandler(route: ApiRoute, request: ApiRequest): Promise<ApiResu
     // Fachliche Ablehnung aus dem Modul oder einem Trigger: Meldung weitergeben, sonst nur ins Server-Log
     const message = userMessage(error);
     if (message !== undefined) return fail("unprocessable", message);
-    console.error(error);
-    return fail("internal_error", INTERNAL_ERROR);
+    return fail("internal_error", reportInternalError("Unerwarteter Fehler in der REST-API", error));
   }
 }
 
@@ -185,6 +185,7 @@ async function dispatch(request: Request): Promise<ApiResult> {
 }
 
 /** Eine Anfrage an /api/v1/… */
-export async function handleApiRequest(request: Request): Promise<Response> {
-  return toResponse(await dispatch(request));
+export function handleApiRequest(request: Request): Promise<Response> {
+  // Jede Logzeile der Anfrage trägt den Bereich api (log-kontext.ts), auch die eines unerwarteten Fehlers
+  return withLogComponent("api", async () => toResponse(await dispatch(request)));
 }

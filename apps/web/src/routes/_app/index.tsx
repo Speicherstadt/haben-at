@@ -224,6 +224,7 @@ function OverviewPage() {
       action: "Ansehen",
       tone: days <= 7 ? "warn" : "info",
       to: "/finanzamt",
+      erledigen: { id: appeal.id },
     });
   }
   for (const afa of data.afaPending) {
@@ -262,6 +263,7 @@ function OverviewPage() {
           {showVatPeriod && !voranmeldungOffen && (
             <Link to="/umsatzsteuer/$zeitraum" params={{ zeitraum: key }} className="btn btn-ghost">
               Voranmeldung {periodLabel(data.period)}
+              {sent && " · abgegeben"}
             </Link>
           )}
           <Link to="/rechnungen/neu" className="btn btn-primary">

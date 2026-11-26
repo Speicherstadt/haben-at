@@ -1,4 +1,4 @@
-import { formatEuro, formatRateMonth, inEuVatArea, type TaxTreatment } from "@haben/core";
+import { formatEuro, formatRateMonth, inEuVatArea, vatTerritory, type TaxTreatment } from "@haben/core";
 import type { StoreSettlement } from "@haben/import";
 import { eq } from "drizzle-orm";
 import { createDraftForReference, newDraftDefaults, type DraftInput } from "../rechnungen/index.ts";
@@ -43,8 +43,9 @@ export interface DraftOutcome {
 }
 
 /** Behandlung aus dem Sitz der Gesellschaft; null, wenn sie in Deutschland säße */
-export function storeTreatment(land: string): TaxTreatment | null {
+export function storeTreatment(land: string, postalCode?: string): TaxTreatment | null {
   const country = land.toUpperCase();
+  if (vatTerritory(country, postalCode)) return "drittland";
   if (country === "DE") return null;
   return inEuVatArea(country) ? "reverse_charge" : "drittland";
 }
@@ -66,8 +67,11 @@ export async function createSettlementDrafts(actor: string, store: Store, settle
     outcome.messages.push(`Rechnungsentwürfe an ${label}: Wähle unter Einstellungen › Bank den Kontakt der Store-Gesellschaft.`);
     return outcome;
   }
-  const [contact] = await db.select({ name: schema.contacts.name, land: schema.contacts.land }).from(schema.contacts).where(eq(schema.contacts.id, contactId));
-  const treatment = contact ? storeTreatment(contact.land) : null;
+  const [contact] = await db
+    .select({ name: schema.contacts.name, land: schema.contacts.land, plz: schema.contacts.plz })
+    .from(schema.contacts)
+    .where(eq(schema.contacts.id, contactId));
+  const treatment = contact ? storeTreatment(contact.land, contact.plz) : null;
   if (!contact || !treatment) {
     outcome.messages.push(`Rechnungsentwürfe an ${label}: Der gewählte Kontakt fehlt oder sitzt in Deutschland.`);
     return outcome;

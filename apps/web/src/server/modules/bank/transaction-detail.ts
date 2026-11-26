@@ -16,6 +16,7 @@ import { learnedDirectSuggestions } from "./learned-suggestions.ts";
 import { payoutCandidates, transferCounterpart, type TransferCounterpart } from "./transfers.ts";
 import { duplicateReviewsForTransaction } from "./duplicate-review.ts";
 import { transactionAllocations } from "./transaction-allocations.ts";
+import { reassignmentSources } from "./allocation-reassignment.ts";
 
 export async function transactionDetail(id: string) {
   const [tx] = await db
@@ -38,6 +39,7 @@ export async function transactionDetail(id: string) {
     .where(eq(schema.bankTransactions.id, id));
   if (!tx) return null;
   const allocations = await transactionAllocations(id);
+  const reassignment = tx.open === 0 || !allocations.some((allocation) => allocation.reversed) ? [] : await reassignmentSources(db, id);
 
   const duplicateReviews = await duplicateReviewsForTransaction(tx.id);
   const automatic = duplicateReviews.every((review) => review.decision === "distinct");
@@ -105,6 +107,7 @@ export async function transactionDetail(id: string) {
     duplicateReviews,
     transaction: tx,
     allocations,
+    reassignment,
     suggestions: vorschlaege,
     sammelrechnung,
     candidates,

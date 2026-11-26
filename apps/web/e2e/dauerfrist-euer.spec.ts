@@ -106,6 +106,30 @@ test("Kennzahl und Sondervorauszahlung stehen zuerst in Klartext, der Paragraf d
   expect(text.indexOf("Einen Monat mehr Zeit")).toBeLessThan(text.indexOf("§ 47, 48 UStDV"));
 });
 
+test("Zeitraum per Tastatur wechseln: Die Auswahl behält über den Neuaufbau der Seite den Fokus", async () => {
+  await page.goto("/umsatzsteuer/2026-12");
+  await page.waitForLoadState("networkidle");
+  const zeitraum = page.getByRole("combobox", { name: "Zeitraum", exact: true });
+  const titel = page.getByRole("heading", { level: 1 });
+  await zeitraum.focus();
+  // Pfeil hoch in der geschlossenen Auswahl wählt den Zeitraum darüber; die Seite wechselt ohne neuen Aufruf und entsteht neu
+  for (const schritt of [1, 2]) {
+    const vorher = await titel.textContent();
+    // Gewählt ist, was der Browser beim change meldet; danach setzt React die Auswahl bis zum Wechsel auf den alten Wert zurück
+    await zeitraum.evaluate((auswahl: HTMLSelectElement) =>
+      auswahl.addEventListener("change", () => (auswahl.ownerDocument.body.dataset.gewaehlt = auswahl.selectedOptions[0]?.textContent ?? ""), { once: true }),
+    );
+    await page.keyboard.press("ArrowUp");
+    await expect(page.locator("body")).toHaveAttribute("data-gewaehlt", /./);
+    const gewaehlt = (await page.locator("body").getAttribute("data-gewaehlt")) ?? "";
+    await page.locator("body").evaluate((body) => delete body.dataset.gewaehlt);
+    expect(gewaehlt, `Schritt ${schritt}`).not.toBe(vorher);
+    await expect(titel).toHaveText(gewaehlt);
+    // Sonst rollte der nächste Druck die Seite, statt weiterzublättern
+    await expect(zeitraum, `Schritt ${schritt}`).toBeFocused();
+  }
+});
+
 test("Fristen und Zeitraum stehen offen, wenn der Wechsel auf einen Zeitraum führt, der nicht zur Einstellung passt", async () => {
   // Ab Oktober vierteljährlich, der gesendete Dezember bleibt monatlich und passt nicht mehr dazu
   await sql`insert into vat_frequencies (year, from_month, frequency) values (2026, 10, 'vierteljaehrlich')`;

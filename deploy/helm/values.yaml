@@ -15,7 +15,8 @@ app:
   # Geheime Umgebungsvariablen; das Chart legt daraus ein Secret an. Pflicht sind die beiden Schlüssel
   # (je `openssl rand -base64 32`, zusätzlich im Passwortmanager sichern), ohne postgresql.enabled auch DATABASE_URL,
   # für getrennte Datenbankrollen dazu MIGRATION_DATABASE_URL. Weitere geheime Werte wie ANTHROPIC_API_KEY,
-  # OIDC_CLIENT_SECRET, EXTRACTION_API_KEY, ENABLE_BANKING_KEY oder HABEN_SETUP_CODE gehören ebenfalls hierher.
+  # OIDC_CLIENT_SECRET, EXTRACTION_API_KEY, ENABLE_BANKING_KEY, HABEN_SETUP_CODE oder HABEN_METRICS_TOKEN gehören
+  # ebenfalls hierher.
   secretEnv:
     BETTER_AUTH_SECRET: ""
     HABEN_ENCRYPTION_KEY: ""
@@ -128,9 +129,29 @@ httpRoute:
     #   namespace: gateway-system
     #   sectionName: https
 
-# Wie das eigene Netz in Compose: An die App kommen nur die Pods aus ingressFrom, an die mitgelieferte Datenbank nur
-# App und Wiederherstellen; eine eigene Datenbank braucht eine eigene Richtlinie. Braucht ein Netzwerk-Plugin, das
-# NetworkPolicy umsetzt (in k3s eingebaut).
+# Metriken unter /api/metrics (https://haben.app/installation-ueberwachung.html). Braucht HABEN_METRICS_TOKEN
+# (mindestens 32 Zeichen, `openssl rand -hex 32`) in app.secretEnv oder app.existingSecret.
+metrics:
+  serviceMonitor:
+    # ServiceMonitor für den Prometheus Operator, etwa aus kube-prometheus-stack; braucht dessen CRDs
+    enabled: false
+    # Leer: Vorgabe des Prometheus. Höchstens "2m": Prometheus sieht einen Wert nur 5 Minuten lang, danach greifen
+    # Alarmregeln und Dashboard nicht mehr
+    interval: ""
+    scrapeTimeout: ""
+    # Labels, nach denen der Prometheus ServiceMonitore auswählt (serviceMonitorSelector), etwa
+    # release: kube-prometheus-stack
+    labels: {}
+  prometheusRule:
+    # Alarmregeln aus files/prometheus-regeln.yml als PrometheusRule; bei mehreren Installationen im Cluster nur bei
+    # einer einschalten, die Regeln gelten für alle
+    enabled: false
+    # Labels, nach denen der Prometheus Regeln auswählt (ruleSelector), etwa release: kube-prometheus-stack
+    labels: {}
+
+# Wie das eigene Netz in Compose: An die App kommen nur die Pods aus ingressFrom (und metricsFrom), an die mitgelieferte
+# Datenbank nur App und Wiederherstellen; eine eigene Datenbank braucht eine eigene Richtlinie. Braucht ein
+# Netzwerk-Plugin, das NetworkPolicy umsetzt (in k3s eingebaut).
 networkPolicy:
   enabled: false
   # Pods des Ingress-Controllers oder Gateways, als Einträge für from einer NetworkPolicy. In k3s mit Traefik:
@@ -141,6 +162,15 @@ networkPolicy:
     #   podSelector:
     #     matchLabels:
     #       app.kubernetes.io/name: traefik
+  # Pods von Prometheus, die /api/metrics abfragen; sie dürfen dann wie ingressFrom an Port 3000 der App, also nur
+  # diese Pods angeben, nicht den ganzen Namespace
+  metricsFrom: []
+    # - namespaceSelector:
+    #     matchLabels:
+    #       kubernetes.io/metadata.name: monitoring
+    #   podSelector:
+    #     matchLabels:
+    #       app.kubernetes.io/name: prometheus
 
 extraVolumes: []
 nodeSelector: {}

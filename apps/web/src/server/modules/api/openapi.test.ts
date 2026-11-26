@@ -100,20 +100,49 @@ describe("OpenAPI-Beschreibung der REST-API", () => {
     );
   });
 
-  it("beschreibt Angebote nur zum Lesen, mit eigenem Recht und der Art jeder Position", () => {
-    expect(Object.keys(doc.paths["/angebote"]!)).toEqual(["get"]);
-    expect(Object.keys(doc.paths["/angebote/{id}"]!)).toEqual(["get"]);
+  it("beschreibt Angebote mit eigenen Rechten zum Lesen und für Entwürfe, mit der Art jeder Position", () => {
+    expect(Object.keys(doc.paths["/angebote"]!)).toEqual(["get", "post"]);
+    expect(Object.keys(doc.paths["/angebote/{id}"]!)).toEqual(["get", "patch", "delete"]);
     expect(doc.paths["/angebote"]).toMatchObject({
       get: {
         security: [{ token: ["angebote:lesen"] }],
         responses: { 200: { content: { "application/json": { schema: { $ref: "#/components/schemas/QuoteList" } } } } },
       },
+      post: {
+        security: [{ token: ["angebote:entwuerfe"] }],
+        requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/QuoteDraftCreate" } } } },
+        responses: { 201: { content: { "application/json": { schema: { $ref: "#/components/schemas/Quote" } } } } },
+      },
     });
     expect(doc.paths["/angebote/{id}"]).toMatchObject({
       get: { responses: { 200: { content: { "application/json": { schema: { $ref: "#/components/schemas/Quote" } } } } } },
+      patch: {
+        security: [{ token: ["angebote:entwuerfe"] }],
+        requestBody: { content: { "application/json": { schema: { $ref: "#/components/schemas/QuoteDraftPatch" } } } },
+        responses: { 409: { description: expect.stringMatching(/^Das Angebot ist festgeschrieben, oder Gesamtrabatt bzw\. Zahlungsplan/) } },
+      },
+      delete: { security: [{ token: ["angebote:entwuerfe"] }], responses: { 204: { description: "Gelöscht" } } },
     });
     const lines = (doc.components.schemas.Quote as { properties: { lines: unknown } }).properties.lines;
     expect(JSON.stringify(lines)).toContain('"alternative"');
+    // Rabatte, Zahlungsplan und Ansprechpartner bleiben der Oberfläche vorbehalten
+    const create = doc.components.schemas.QuoteDraftCreate as { additionalProperties: boolean; required: string[]; properties: Record<string, unknown> };
+    expect(create).toMatchObject({ additionalProperties: false, required: ["lines"] });
+    expect(create.properties).toHaveProperty("validUntil");
+    for (const field of ["discount", "paymentPlan", "contactPersonId"]) expect(create.properties).not.toHaveProperty(field);
+    expect(doc.components.schemas.QuoteDraftPatch).not.toHaveProperty("required");
+    const line = doc.components.schemas.QuoteLineInput as { additionalProperties: boolean; properties: Record<string, unknown> };
+    expect(line.additionalProperties).toBe(false);
+    expect(JSON.stringify(line.properties.kind)).toContain('"alternative"');
+    expect(line.properties).not.toHaveProperty("discount");
+  });
+
+  it("nennt für Angebotsentwürfe keine Vorgabe, die der Server nicht nimmt; ein Client, der sie mitschickt, überschriebe den Entwurf", () => {
+    // Anlegen: Kopftext aus den Textbausteinen, Steuer aus den Firmendaten, Sprache des Kontakts, nicht "", regulaer, de
+    const create = doc.components.schemas.QuoteDraftCreate as { properties: Record<string, object> };
+    for (const field of ["intro", "taxTreatment", "language"]) expect(create.properties[field], field).not.toHaveProperty("default");
+    // Ändern: ein ungenanntes Feld bleibt, wie es ist
+    expect(collect(doc.components.schemas.QuoteDraftPatch, "default")).toEqual([]);
   });
 
   it("beschreibt Einheiten: Cent, Basispunkte, Tausendstel", () => {

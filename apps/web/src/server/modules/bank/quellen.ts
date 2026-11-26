@@ -33,6 +33,7 @@ const FORMAT_NAMEN: Record<StatementFormat, string> = {
   "stripe-api": "Stripe (Abruf)",
   "shopify-payments-csv": "Shopify",
   "ebay-csv": "eBay",
+  "amazon-settlement": "Amazon",
   "etsy-csv": "Etsy",
   // Bewusst ein anderer Name als beim CSV-Import: Wer von der CSV auf den Abruf wechselt, wechselt die Quelle
   "etsy-ledger": "Etsy Payments (Abruf)",

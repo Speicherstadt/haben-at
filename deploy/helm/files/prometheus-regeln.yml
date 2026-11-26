@@ -1,0 +1,42 @@
+# Alarmregeln für die Metriken von Haben unter /api/metrics (https://haben.app/installation-ueberwachung.html), als
+# Regeldatei für Prometheus (rule_files). Das Helm-Chart liest sie für die PrometheusRule (metrics.prometheusRule); ohne
+# Kubernetes lädt man sie direkt. Getestet mit promtool in scripts/metriken/regeln.test.yml.
+groups:
+  - name: haben
+    rules:
+      # /api/health meldet fail: Datenbank nicht erreichbar oder Migrationen ausstehend
+      - alert: HabenNichtBereit
+        expr: haben_up == 0
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: "Haben ist nicht bereit ({{ $labels.instance }})"
+          description: "/api/health meldet fail: Datenbank nicht erreichbar oder Migrationen ausstehend."
+      # Ein Job wirft bei jedem Lauf, etwa weil ein Dienst dauerhaft nicht antwortet
+      - alert: HabenJobOhneErfolg
+        expr: time() - haben_job_last_success_timestamp_seconds > 86400
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hintergrundjob {{ $labels.task }} seit über 24 Stunden ohne Erfolg ({{ $labels.instance }})"
+          description: "Die Meldung steht im Log des Servers."
+      # Derselbe Fall nach einem Neustart: Ohne Erfolg seit dem Start fehlt die Reihe des letzten Erfolgs, es gibt nur
+      # den letzten Lauf
+      - alert: HabenJobOhneErfolg
+        expr: haben_job_last_run_timestamp_seconds unless haben_job_last_success_timestamp_seconds
+        for: 24h
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hintergrundjob {{ $labels.task }} seit über 24 Stunden ohne Erfolg ({{ $labels.instance }})"
+          description: "Die Meldung steht im Log des Servers."
+      # Auch Jobs, die nach einem Fehler erst an ihrem nächsten Termin wieder versuchen (Kontoabruf, ELSTER-Postfach) und
+      # bis dahin als erfolgreich gelten; eine abgelaufene Bankverbindung zeigt sich nur so, einen Tag lang
+      - alert: HabenJobGescheitert
+        expr: increase(haben_job_failures_total[1d]) > 0
+        labels:
+          severity: warning
+        annotations:
+          summary: "Hintergrundjob {{ $labels.task }} ist in den letzten 24 Stunden gescheitert ({{ $labels.instance }})"
+          description: "Die Meldung steht im Log des Servers, bei Bankverbindungen auch unter Bank in Haben."

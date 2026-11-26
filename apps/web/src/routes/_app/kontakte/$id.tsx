@@ -50,17 +50,8 @@ export const Route = createFileRoute("/_app/kontakte/$id")({
       { rel: "stylesheet", href: styles },
     ],
   }),
-  component: ContactRoute,
+  component: ContactPage,
 });
-
-/**
- * Beim Wechsel zu einem anderen Kontakt bleibt die Seite stehen; sie entsteht je Kontakt neu, sonst blieben Formular (dessen
- * Version kann bei beiden gleich sein), Karten mit Angefangenem und Meldungen des vorigen (#1834, #1839)
- */
-function ContactRoute() {
-  const { contact } = Route.useLoaderData();
-  return <ContactPage key={contact.id} />;
-}
 
 function ContactPage() {
   const { contact, history, service } = Route.useLoaderData();

@@ -1,0 +1,7 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+10000000004	23.09.2026 19:53:36 UTC	04.11.2026 19:53:15 UTC	06.11.2026 19:53:15 UTC	2,62	EUR																		
+10000000004						Order	401-0000000-0000001	401-0000000-0000001		T00000001	Amazon.nl	ItemPrice	Principal	5,46	AFN	28.10.2026	28.10.2026 23:48:29 UTC	8000000000001			ART-01	1	
+10000000004						Order	401-0000000-0000001	401-0000000-0000001		T00000001	Amazon.nl	ItemPrice	Shipping	1,00	AFN	28.10.2026	28.10.2026 23:48:29 UTC	8000000000001			ART-01	1	
+10000000004						Order	401-0000000-0000001	401-0000000-0000001		T00000001	Amazon.nl	ItemFees	FBAPerUnitFulfillmentFee	-2,32	AFN	28.10.2026	28.10.2026 23:48:29 UTC	8000000000001			ART-01	1	
+10000000004						Order	401-0000000-0000001	401-0000000-0000001		T00000001	Amazon.nl	ItemFees	Commission	-0,52	AFN	28.10.2026	28.10.2026 23:48:29 UTC	8000000000001			ART-01	1	
+10000000004						Order	401-0000000-0000001	401-0000000-0000001		T00000001	Amazon.nl	Promotion	Shipping	-1,00	AFN	28.10.2026	28.10.2026 23:48:29 UTC	8000000000001			ART-01	1	

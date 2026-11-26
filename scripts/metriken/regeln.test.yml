@@ -1,0 +1,89 @@
+# Unit-Tests der Alarmregeln (deploy/helm/files/prometheus-regeln.yml) für `promtool test rules`, im CI-Job check.
+# https://prometheus.io/docs/prometheus/latest/configuration/unit_testing_rules/
+rule_files:
+  - ../../deploy/helm/files/prometheus-regeln.yml
+evaluation_interval: 1m
+tests:
+  # Health meldet fail: erst nach 5 Minuten ein Alarm
+  - interval: 1m
+    input_series:
+      - series: 'haben_up{instance="haben:3000"}'
+        values: "1 1 0 0 0 0 0 0 0 0"
+    alert_rule_test:
+      - eval_time: 4m
+        alertname: HabenNichtBereit
+        exp_alerts: []
+      - eval_time: 9m
+        alertname: HabenNichtBereit
+        exp_alerts:
+          - exp_labels: { severity: critical, instance: "haben:3000" }
+            exp_annotations:
+              summary: "Haben ist nicht bereit (haben:3000)"
+              description: "/api/health meldet fail: Datenbank nicht erreichbar oder Migrationen ausstehend."
+  # Letzter Erfolg zu Beginn, danach nur noch Fehlschläge: nach über 24 Stunden ein Alarm, der Erfolgreiche bleibt still
+  - interval: 1h
+    input_series:
+      - series: 'haben_job_last_success_timestamp_seconds{instance="haben:3000",task="receipt_inbox"}'
+        values: "0x30"
+      - series: 'haben_job_last_success_timestamp_seconds{instance="haben:3000",task="bank_sync"}'
+        values: "0+3600x30"
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: HabenJobOhneErfolg
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: HabenJobOhneErfolg
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "haben:3000", task: receipt_inbox }
+            exp_annotations:
+              summary: "Hintergrundjob receipt_inbox seit über 24 Stunden ohne Erfolg (haben:3000)"
+              description: "Die Meldung steht im Log des Servers."
+  # Nach einem Neustart nie gelungen: Es gibt nur den letzten Lauf. Nach 24 Stunden ein Alarm, nicht vorher und nicht für
+  # den Job, der nach 2 Stunden gelang. Minütlich gescrapt, sonst verwirft Prometheus die Werte nach 5 Minuten und `for`
+  # beginnt neu
+  - interval: 1m
+    input_series:
+      - series: 'haben_job_last_run_timestamp_seconds{instance="haben:3000",task="receipt_inbox"}'
+        values: "0x1600"
+      - series: 'haben_job_last_run_timestamp_seconds{instance="haben:3000",task="bank_sync"}'
+        values: "0x1600"
+      - series: 'haben_job_last_success_timestamp_seconds{instance="haben:3000",task="bank_sync"}'
+        values: "_x120 7200x1480"
+    alert_rule_test:
+      - eval_time: 23h
+        alertname: HabenJobOhneErfolg
+        exp_alerts: []
+      - eval_time: 25h
+        alertname: HabenJobOhneErfolg
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "haben:3000", task: receipt_inbox }
+            exp_annotations:
+              summary: "Hintergrundjob receipt_inbox seit über 24 Stunden ohne Erfolg (haben:3000)"
+              description: "Die Meldung steht im Log des Servers."
+  # Abgelaufene Bankverbindung: ein einzelner Fehler, danach gilt jeder Lauf als erfolgreich. Alarm für einen Tag, auch
+  # über einen Neustart hinweg, bei dem der Zähler auf 0 zurückspringt
+  - interval: 1h
+    input_series:
+      - series: 'haben_job_failures_total{instance="haben:3000",task="bank_sync"}'
+        values: "0 0 1 1 1 0 0x30"
+      - series: 'haben_job_failures_total{instance="haben:3000",task="fints_sync"}'
+        values: "0x36"
+    alert_rule_test:
+      - eval_time: 3h
+        alertname: HabenJobGescheitert
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "haben:3000", task: bank_sync }
+            exp_annotations:
+              summary: "Hintergrundjob bank_sync ist in den letzten 24 Stunden gescheitert (haben:3000)"
+              description: "Die Meldung steht im Log des Servers, bei Bankverbindungen auch unter Bank in Haben."
+      # Nach dem Neustart bei 5h ist der Zähler wieder 0, der Fehler von 2h zählt noch
+      - eval_time: 20h
+        alertname: HabenJobGescheitert
+        exp_alerts:
+          - exp_labels: { severity: warning, instance: "haben:3000", task: bank_sync }
+            exp_annotations:
+              summary: "Hintergrundjob bank_sync ist in den letzten 24 Stunden gescheitert (haben:3000)"
+              description: "Die Meldung steht im Log des Servers, bei Bankverbindungen auch unter Bank in Haben."
+      - eval_time: 27h
+        alertname: HabenJobGescheitert
+        exp_alerts: []

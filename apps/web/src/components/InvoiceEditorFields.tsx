@@ -6,12 +6,13 @@ import { Field } from "./Field.tsx";
 import { OutgoingTaxFields } from "./OutgoingTaxFields.tsx";
 import { PaymentMethodFields, PaymentTermField } from "./PaymentMethodFields.tsx";
 import { SkontoFields } from "./SkontoFields.tsx";
+import { VatTerritoryHint } from "./VatTerritoryHint.tsx";
 import type { InvoiceEditorModel } from "./use-invoice-editor.ts";
 
 // Felder der Karte „Rechnungsdaten“ bzw. „Angebotsdaten“ (InvoiceEditorDetails): Kunde, Daten und Zahlung, Steuer und Preise
 
 /** Kunde, Ansprechpartner und bei Abschlag oder Schlussrechnung das Angebot */
-export function InvoiceCustomerFields({ editor }: { editor: InvoiceEditorModel }) {
+export function InvoiceCustomerFields({ editor, territoryDescription }: { editor: InvoiceEditorModel; territoryDescription: string | undefined }) {
   const {
     chooseContact,
     chooseQuote,
@@ -31,7 +32,7 @@ export function InvoiceCustomerFields({ editor }: { editor: InvoiceEditorModel }
   } = editor;
   return (
     <>
-      <Field label="Kunde" error={error("contact")} style={{ gridColumn: "1 / -1" }}>
+      <Field label="Kunde" error={error("contact")} describedBy={territoryDescription} style={{ gridColumn: "1 / -1" }}>
         {(control) => (
           <ContactCombobox
             {...control}
@@ -165,9 +166,10 @@ export function InvoiceDatePaymentFields({ editor }: { editor: InvoiceEditorMode
 }
 
 /** Umsatzsteuerliche Behandlung und Netto- oder Bruttopreise */
-export function InvoiceTaxFields({ editor }: { editor: InvoiceEditorModel }) {
+export function InvoiceTaxFields({ editor, territoryDescription }: { editor: InvoiceEditorModel; territoryDescription: string | undefined }) {
   const {
     chooseTreatment,
+    contact,
     editable,
     error,
     exemptionReason,
@@ -184,7 +186,9 @@ export function InvoiceTaxFields({ editor }: { editor: InvoiceEditorModel }) {
   } = editor;
   return (
     <>
+      {territoryDescription && <VatTerritoryHint id={territoryDescription} country={contact?.land} postalCode={contact?.plz} />}
       <OutgoingTaxFields
+        describedBy={territoryDescription}
         treatment={taxTreatment}
         details={taxDetails}
         exemptionReason={exemptionReason}

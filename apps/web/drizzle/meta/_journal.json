@@ -2255,6 +2255,41 @@
       "when": 1795505539555,
       "tag": "0321_steuerfrei_nach_leistung_trigger",
       "breakpoints": true
+    },
+    {
+      "idx": 322,
+      "version": "7",
+      "when": 1795543455771,
+      "tag": "0322_add_amazon_marktplatz",
+      "breakpoints": true
+    },
+    {
+      "idx": 323,
+      "version": "7",
+      "when": 1795544923442,
+      "tag": "0323_rechnungsaustausch",
+      "breakpoints": true
+    },
+    {
+      "idx": 324,
+      "version": "7",
+      "when": 1795546922547,
+      "tag": "0324_postfach_erledigt",
+      "breakpoints": true
+    },
+    {
+      "idx": 325,
+      "version": "7",
+      "when": 1795546927144,
+      "tag": "0325_postfach_erledigt_trigger",
+      "breakpoints": true
+    },
+    {
+      "idx": 326,
+      "version": "7",
+      "when": 1795547499310,
+      "tag": "0326_bank_wiederzuordnung",
+      "breakpoints": true
     }
   ]
 }

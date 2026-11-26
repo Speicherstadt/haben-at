@@ -4,6 +4,7 @@ import { draftInputOf } from "./external-reference.ts";
 import { InvoiceError } from "./invoice-error.ts";
 import { draftSchema } from "./draft-schema.ts";
 import { assertCustomer, insertDraft } from "./invoice-drafts.ts";
+import { replacementProblem } from "./invoice-replacement.ts";
 import { getInvoice, type Invoice } from "./invoices.ts";
 import { mitVorlage } from "./beleg-platzhalter.ts";
 
@@ -15,16 +16,16 @@ function copyProblem(invoice: Pick<Invoice, "kind" | "variant">): string | null 
 }
 
 /**
- * Neuer Entwurf aus einer festgeschriebenen Rechnung oder einem Entwurf für die nächste ähnliche (docs/rechnungen.md, Festgeschriebene Rechnung, Kopieren).
- * Datum heute; Leistungszeitraum und Kurs leer, der Kurs folgt dem neuen Leistungsmonat. Anhänge gehören zur einzelnen
- * Rechnung und bleiben beim Original, ebenso der Bezug zu einem Angebot.
+ * Kopie für die nächste ähnliche Rechnung oder gezielter Ersatz derselben Leistung.
+ * Anhänge bleiben am ursprünglichen Beleg. Nur beim Austausch werden Leistungszeitraum, Angebot und Kurs übernommen.
  */
-export async function copyInvoice(actor: string, id: string, today: string): Promise<Invoice> {
+export async function copyInvoice(actor: string, id: string, today: string, { replacement = false }: { replacement?: boolean } = {}): Promise<Invoice> {
   const data = await getInvoice(id);
   if (!data) throw new InvoiceError("Rechnung nicht gefunden.");
   const { invoice, lines } = data;
   const problem = copyProblem(invoice);
   if (problem) throw new InvoiceError(problem);
+  if (replacement && invoice.status !== "final") throw new InvoiceError("Ein Entwurf kann keine ausgestellte Rechnung ersetzen.");
   const paid = invoice.paymentMethod === "bereits_bezahlt";
   return withActor(actor, async (tx) => {
     await assertCustomer(tx, invoice.contactId);
@@ -35,18 +36,23 @@ export async function copyInvoice(actor: string, id: string, today: string): Pro
       ...mitVorlage(invoice),
       contactPersonId: personActive ? invoice.contactPersonId : null,
       issueDate: today,
-      serviceFrom: null,
-      serviceTo: null,
+      serviceFrom: replacement ? invoice.serviceFrom : null,
+      serviceTo: replacement ? invoice.serviceTo : null,
       exchangeRate: null,
       exchangeRateDate: null,
-      paymentMethod: paid ? "ueberweisung" : invoice.paymentMethod,
-      paidVia: null,
-      paidOn: null,
-      // Eine Rechnung aus einem Angebot rechnet das Angebot ab; die Kopie ist eine eigene Rechnung ohne Bezug
-      quoteId: null,
+      paymentMethod: paid && !replacement ? "ueberweisung" : invoice.paymentMethod,
+      paidVia: replacement ? invoice.paidVia : null,
+      paidOn: replacement ? invoice.paidOn : null,
+      quoteId: replacement ? invoice.quoteId : null,
       advanceType: null,
+      replacesInvoiceId: replacement ? invoice.id : null,
       deducts: [],
     });
-    return insertDraft(tx, input);
+    const draft = await insertDraft(tx, input);
+    if (replacement) {
+      const problem = await replacementProblem(draft, invoice, tx);
+      if (problem) throw new InvoiceError(`${problem}.`);
+    }
+    return draft;
   });
 }

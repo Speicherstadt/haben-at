@@ -149,12 +149,45 @@
         }
       }
     },
+    "metrics": {
+      "type": "object",
+      "additionalProperties": false,
+      "properties": {
+        "serviceMonitor": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {},
+            "interval": {},
+            "scrapeTimeout": {},
+            "labels": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        },
+        "prometheusRule": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {},
+            "labels": {
+              "type": "object",
+              "additionalProperties": true
+            }
+          }
+        }
+      }
+    },
     "networkPolicy": {
       "type": "object",
       "additionalProperties": false,
       "properties": {
         "enabled": {},
         "ingressFrom": {
+          "type": "array"
+        },
+        "metricsFrom": {
           "type": "array"
         }
       }

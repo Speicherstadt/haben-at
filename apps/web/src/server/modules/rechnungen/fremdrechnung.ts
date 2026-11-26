@@ -124,6 +124,8 @@ async function assertAdoptable(
       sellerUstId: company.ustId,
       buyerUstId: contact.ustId,
       buyerCountry: contact.land,
+      buyerPostalCode: contact.plz,
+      foreignPlace: input.taxDetails?.foreignPlace,
       exemptionReason: input.exemptionReason,
     }),
   ];

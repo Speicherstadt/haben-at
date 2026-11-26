@@ -13,6 +13,7 @@ import { type LockedTransaction, lockTransaction } from "./payment-booking.ts";
 import { settledOn } from "./settled-amounts.ts";
 import { bookWriteOff } from "./write-offs.ts";
 import { restMixeNachKorrekturen } from "./offene-posten.ts";
+import { reassignmentSource } from "./allocation-reassignment.ts";
 
 export const restSchema = z.object({
   transactionId: z.uuid(),
@@ -21,6 +22,9 @@ export const restSchema = z.object({
     z.object({ kind: z.literal("document"), documentId: z.uuid() }),
   ]),
   rest: z.enum(["skonto", "forderungsausfall", "skontoErhalten", "kursdifferenz"]),
+  reassignsId: z.uuid().nullish(),
+  /** Bei einem aufgeteilten Umsatz kann der Teil für die Kursdifferenz einen anderen Beleg haben. */
+  restReassignsId: z.uuid().nullish(),
   /** Nur mit Skonto auf eine Rechnung: offene Korrekturen, die der Kunde vor dem Skonto abgezogen hat (#1398) */
   korrekturen: z.array(z.uuid()).min(1).max(19).optional(),
 });
@@ -36,12 +40,12 @@ export async function allocateWithRest(actor: string, input: z.infer<typeof rest
     const bank = await lockTransaction(tx, input.transactionId);
     if (bank.open === 0) throw new BankError("Der Umsatz ist schon ganz zugeordnet.");
     if (input.rest === "kursdifferenz") {
-      await allocateWithExchangeDifference(tx, company, bank, input.target);
+      await allocateWithExchangeDifference(tx, company, bank, input.target, input.reassignsId, input.restReassignsId);
       return;
     }
     if (input.korrekturen) {
       if (input.target.kind !== "invoice" || input.rest !== "skonto") throw new BankError("Korrekturen gehen nur mit Skonto auf eine Rechnung.");
-      await allocateWithCorrectionsAndSkonto(tx, company, bank, input.target.invoiceId, input.korrekturen);
+      await allocateWithCorrectionsAndSkonto(tx, company, bank, input.target.invoiceId, input.korrekturen, input.reassignsId);
       return;
     }
     const isInvoice = input.target.kind === "invoice";
@@ -50,8 +54,8 @@ export async function allocateWithRest(actor: string, input: z.infer<typeof rest
       input.target.kind === "invoice"
         ? { kind: "invoice", invoiceId: input.target.invoiceId, amount: bank.open }
         : { kind: "document", documentId: input.target.documentId, amount: bank.open };
-    await bookPart(tx, company, bank, part, null);
-    const base = { date: bank.bookingDate, transactionId: bank.id };
+    const date = await bookPart(tx, company, bank, { ...part, reassignsId: input.reassignsId }, null);
+    const base = { date, transactionId: bank.id };
     await bookWriteOff(
       tx,
       company,
@@ -73,6 +77,7 @@ async function allocateWithCorrectionsAndSkonto(
   bank: LockedTransaction,
   invoiceId: string,
   korrekturen: readonly string[],
+  reassignsId?: string | null,
 ) {
   if (bank.amount <= 0) throw new BankError("Korrekturen und Skonto gibt es nur bei einem Zahlungseingang.");
   const [invoice] = await tx.select().from(schema.invoices).where(eq(schema.invoices.id, invoiceId));
@@ -109,9 +114,11 @@ async function allocateWithCorrectionsAndSkonto(
   // der Rechnung steht im Anteil, auch mit null, damit Voranmeldung und EÜR ihn als gespeichert annehmen (recordedTaxShares).
   const anteile = paidTaxShares(mix.rest, skonto);
   const taxShares = mix.rechnung.taxes.map((t) => anteile.find((a) => a.rate === t.rate) ?? { rate: t.rate, base: 0, tax: 0 });
-  await bookWriteOff(tx, company, { kind: "skonto", invoiceId, date: bank.bookingDate, transactionId: bank.id, amount: skonto }, { taxShares });
+  const source = await reassignmentSource(tx, bank.id, invoiceAmount, reassignsId);
+  const date = source?.date ?? bank.bookingDate;
+  await bookWriteOff(tx, company, { kind: "skonto", invoiceId, date, transactionId: bank.id, amount: skonto }, { taxShares });
   const splitId = randomUUID();
-  await bookPart(tx, company, bank, { kind: "invoice", invoiceId, amount: invoiceAmount }, splitId);
+  await bookPart(tx, company, bank, { kind: "invoice", invoiceId, amount: invoiceAmount, reassignsId }, splitId);
   for (const part of parts) await bookPart(tx, company, bank, part, splitId);
 }
 
@@ -125,6 +132,8 @@ async function allocateWithExchangeDifference(
   company: Awaited<ReturnType<typeof openBooks>>,
   bank: LockedTransaction,
   target: z.infer<typeof restSchema>["target"],
+  reassignsId?: string | null,
+  restReassignsId?: string | null,
 ) {
   let open: number;
   if (target.kind === "invoice") {
@@ -142,11 +151,11 @@ async function allocateWithExchangeDifference(
   const toTarget = (amount: number): Part =>
     target.kind === "invoice" ? { kind: "invoice", invoiceId: target.invoiceId, amount } : { kind: "document", documentId: target.documentId, amount };
   if (Math.abs(bank.open) <= Math.abs(open)) {
-    await bookPart(tx, company, bank, toTarget(bank.open), null);
+    const date = await bookPart(tx, company, bank, { ...toTarget(bank.open), reassignsId }, null);
     if (bank.open !== open) {
       await bookWriteOff(tx, company, {
         kind: "kursdifferenz",
-        date: bank.bookingDate,
+        date,
         transactionId: bank.id,
         ...(target.kind === "invoice" ? { invoiceId: target.invoiceId } : { documentId: target.documentId }),
       });
@@ -154,7 +163,7 @@ async function allocateWithExchangeDifference(
   } else {
     // Wird die Aufteilung aufgehoben, dann ganz (reverseAllocation)
     const splitId = randomUUID();
-    await bookPart(tx, company, bank, toTarget(open), splitId);
-    await bookPart(tx, company, bank, { kind: "kursdifferenz", amount: bank.open - open }, splitId);
+    await bookPart(tx, company, bank, { ...toTarget(open), reassignsId }, splitId);
+    await bookPart(tx, company, bank, { kind: "kursdifferenz", amount: bank.open - open, reassignsId: restReassignsId }, splitId);
   }
 }

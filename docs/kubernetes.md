@@ -240,6 +240,41 @@ ihn nicht über `podSelector` und `namespaceSelector`
 Für ihn gehört meist ein `ipBlock` mit den Adressen der Knoten in `ingressFrom`; Cilium wertet ihn erst mit
 `policyCIDRMatchMode: nodes` aus ([Cilium](https://docs.cilium.io/en/stable/network/kubernetes/policy/)).
 
+## Metriken
+
+`GET /api/metrics` gibt es nur mit `HABEN_METRICS_TOKEN` ([Konfiguration](installation-konfiguration.md)) unter
+`app.secretEnv` oder im `app.existingSecret`; was der Endpunkt meldet und Alarmregeln stehen unter
+[Überwachung](installation-ueberwachung.md). Mit dem Prometheus Operator, etwa aus kube-prometheus-stack, legt
+`metrics.serviceMonitor.enabled: true` einen `ServiceMonitor` an, der das Token aus dem Secret der App nimmt. Die
+`labels` braucht es, wenn der Prometheus nur ServiceMonitore mit bestimmten Labels auswählt (`serviceMonitorSelector`):
+
+```yaml
+app:
+  secretEnv:
+    HABEN_METRICS_TOKEN: "<openssl rand -hex 32>"
+metrics:
+  serviceMonitor:
+    enabled: true
+    labels:
+      release: kube-prometheus-stack
+networkPolicy:
+  metricsFrom:
+    - namespaceSelector:
+        matchLabels:
+          kubernetes.io/metadata.name: monitoring
+      podSelector:
+        matchLabels:
+          app.kubernetes.io/name: prometheus
+```
+
+Mit `networkPolicy.enabled` lässt `metricsFrom` Prometheus zusätzlich zu `ingressFrom` an die App. Er erreicht dann wie
+der Ingress-Controller die ganze App an Port 3000 und könnte `X-Forwarded-For` setzen, deshalb dort nur die Pods von
+Prometheus angeben, nicht den ganzen Namespace.
+
+`metrics.prometheusRule.enabled: true` legt die [Alarmregeln](installation-ueberwachung.md) als `PrometheusRule` an, mit
+`metrics.prometheusRule.labels` für den `ruleSelector`. Die Regeln gelten für alle Reihen mit diesen Namen; bei mehreren
+Installationen im Cluster schaltet man sie deshalb nur bei einer ein.
+
 ## ELSTER
 
 ERiC gibt es nur für Linux x86_64. In einem Cluster mit beiden Architekturen setzt `nodeSelector` mit

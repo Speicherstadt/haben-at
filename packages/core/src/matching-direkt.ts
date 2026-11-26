@@ -19,6 +19,7 @@ export const PAYMENT_PROVIDERS = {
   shopify: { label: "Shopify Payments", pattern: /shopify/i },
   etsy: { label: "Etsy Payments", pattern: /etsy/i },
   ebay: { label: "eBay", pattern: /ebay/i },
+  amazon: { label: "Amazon", pattern: /amazon/i },
   sumup: { label: "SumUp", pattern: /sum ?up/i },
   // Auszahlender laut Auszahlungsbeleg: Google Payment Ireland Ltd bzw. Apple Distribution International Ltd. Für Apple an
   // echten Kontoauszügen bestätigt („APPLE DISTRIBUTION INTL LTD“, #1628); den Absender „Apple Inc“ erkennt
@@ -27,6 +28,12 @@ export const PAYMENT_PROVIDERS = {
   appstore: { label: "App Store", pattern: /apple\s*distribution|itunes/i },
   sonstige: { label: "Anderer Zahlungsdienstleister", pattern: null },
 } as const;
+
+/**
+ * Die EUR-Marktplätze von Amazon (die `marketplace-name`-Werte des Settlement Reports). Ein Amazon-Konto gehört zu genau
+ * einem Marktplatz; die Abrechnung eines anderen wird beim Import abgelehnt, damit kein Report ins falsche Verrechnungskonto läuft.
+ */
+export const AMAZON_MARKETPLACES: readonly string[] = ["Amazon.de", "Amazon.fr", "Amazon.it", "Amazon.es", "Amazon.nl", "Amazon.com.be", "Amazon.ie"];
 
 export type PaymentProvider = keyof typeof PAYMENT_PROVIDERS;
 

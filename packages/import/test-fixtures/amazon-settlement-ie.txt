@@ -1,0 +1,12 @@
+settlement-id	settlement-start-date	settlement-end-date	deposit-date	total-amount	currency	transaction-type	order-id	merchant-order-id	adjustment-id	shipment-id	marketplace-name	amount-type	amount-description	amount	fulfillment-id	posted-date	posted-date-time	order-item-code	merchant-order-item-id	merchant-adjustment-item-id	sku	quantity-purchased	promotion-id
+10000000003	23.08.2026 07:25:37 UTC	04.10.2026 07:25:36 UTC	06.10.2026 07:25:36 UTC	1,87	EUR																		
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	ItemPrice	Principal	5,00	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	ItemPrice	Tax	1,15	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	ItemPrice	Shipping	1,08	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	ItemPrice	ShippingTax	0,25	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	ItemFees	FBAPerUnitFulfillmentFee	-1,94	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	ItemFees	Commission	-0,58	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	Promotion	Shipping	-1,08	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						Order	301-0000000-0000001	301-0000000-0000001		T00000001	Amazon.ie	Promotion	TaxDiscount	-0,25	AFN	01.10.2026	01.10.2026 17:38:22 UTC	8000000000001			ART-01	1	
+10000000003						other-transaction						other-transaction	Payable to Amazon	-3,66		23.08.2026	23.08.2026 07:25:37 UTC						
+10000000003						other-transaction	302-0000000-0000002	302-0000000-0000002	amzn1:crow:FAKE00000000000000000000			FBA Inventory Reimbursement	REVERSAL_REIMBURSEMENT	1,90		28.09.2026	28.09.2026 02:59:01 UTC				ART-02	1	

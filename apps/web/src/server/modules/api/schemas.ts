@@ -1,9 +1,7 @@
 import { INVOICE_PAYMENT_METHODS, PRICE_MODES, TAX_TREATMENT_KEYS, inBasisPoints, inCents, inMillis } from "@haben/core";
 import { z } from "zod";
-import { documentReferenceSchema, MAX_DOCUMENT_SIZE } from "../belege/index.ts";
 import { draftSchema, externalReferenceSchema } from "../rechnungen/index.ts";
 import { contactSchema as contactInputSchema } from "../stammdaten/index.ts";
-import { documentTaxShape } from "./document-tax-schema.ts";
 
 /*
  * Schemas der REST-API: Eingaben, Antworten und Fehler. Die Eingaben bauen auf den Schemas der Module auf (contactSchema,
@@ -146,7 +144,7 @@ const draftFields = draftSchema.shape;
 // Rabatte bleiben der Oberfläche vorbehalten, wie Abschlags- und Schlussrechnung
 const { discount: _discount, ...lineFields } = draftFields.lines.element.shape;
 
-const lineInputSchema = z
+export const lineInputSchema = z
   .object({
     ...lineFields,
     // Die Felder kommen aus @haben/core (zod/mini) und kennen kein .describe; z.describe als Prüfung gibt es für beide
@@ -174,6 +172,7 @@ const draftApiFields = {
   issueDate: draftFields.issueDate.describe("Rechnungsdatum JJJJ-MM-TT, Vorgabe heute"),
   serviceFrom: draftFields.serviceFrom,
   serviceTo: draftFields.serviceTo,
+  replacesInvoiceId: draftFields.replacesInvoiceId.describe("Rechnungsaustausch: UUID der bereits stornierten Rechnung; null entfernt den Bezug"),
   paymentTermDays: draftFields.paymentTermDays.describe("Zahlungsziel in Tagen, Vorgabe aus den Firmendaten"),
   paymentMethod: z.enum(["ueberweisung", "bereits_bezahlt"]).describe("Zahlungsart; bereits_bezahlt erfordert paidVia und paidOn"),
   paidVia: draftFields.paidVia.describe("Bei bereits_bezahlt: Zahlungsdienstleister (z. B. eBay) oder bar"),
@@ -204,7 +203,8 @@ const referenceFields = {
   externalId: externalReferenceSchema.shape.externalId.describe("Bestellnummer auf der Plattform; mit externalSource eindeutig"),
 };
 
-const optional = <T extends Record<string, z.ZodType>>(shape: T) =>
+/** Jedes Feld optional: Anlegen nimmt Vorgaben, Ändern lässt Ungenanntes stehen */
+export const optional = <T extends Record<string, z.ZodType>>(shape: T) =>
   Object.fromEntries(Object.entries(shape).map(([key, value]) => [key, value.optional()])) as { [K in keyof T]: z.ZodOptional<T[K]> };
 
 export const draftCreateSchema = z
@@ -260,6 +260,7 @@ export const invoiceSchema = z
   .object({
     ...invoiceSummaryShape,
     correctsId: z.uuid().nullable().describe("Storno und Korrektur: die ursprüngliche Rechnung"),
+    replacesInvoiceId: z.uuid().nullable().describe("Rechnungsaustausch: die ersetzte Rechnung"),
     serviceFrom: isoDate.nullable(),
     serviceTo: isoDate.nullable(),
     paymentTermDays: z.number().int(),
@@ -298,102 +299,6 @@ export const invoiceQuerySchema = z
     contactId: z.uuid().optional(),
     externalSource: z.string().trim().min(1).max(40).optional().describe("Nur Rechnungen dieser Plattform"),
     externalId: z.string().trim().min(1).max(100).optional().describe("Mit externalSource: die Rechnung zu dieser Bestellung"),
-    ...pageQuery,
-  })
-  .strict();
-
-// ── Belege ────────────────────────────────────────────────────────────────────
-
-const MB = MAX_DOCUMENT_SIZE / 1024 / 1024;
-
-/** Formate wie beim Upload unter Belege; Haben erkennt sie am Inhalt, nicht am Namen oder am angegebenen Typ */
-export const DOCUMENT_MEDIA_TYPES = ["application/pdf", "image/jpeg", "image/png", "image/webp", "image/heic", "application/xml", "text/xml"] as const;
-
-/**
- * Neuer Beleg als multipart/form-data. Lieferant, Nummer, Datum und Beträge nimmt die API bewusst nicht an: Sie kommen
- * wie beim Upload in Haben aus der E-Rechnung oder der KI-Auslesung, die sie sonst überschriebe, und geprüft wird in Haben.
- */
-export const documentUploadSchema = z
-  .object({
-    datei: z
-      .file()
-      .optional()
-      .describe(`Der Beleg: PDF, JPEG, PNG, WebP, HEIC oder E-Rechnungs-XML (XRechnung, ZUGFeRD), höchstens ${MB} MB; statt dessen auch im Feld file`),
-    // Paperless-ngx hängt die Datei in seiner Webhook-Aktion fest unter „file“ an (#104); eine Datei je Anfrage
-    file: z.file().optional().describe("Wie datei, für Werkzeuge mit festem Feldnamen wie die Webhook-Aktion von Paperless-ngx; nur eines von beiden"),
-    note: z.string().max(2000).optional().describe("Notiz am Beleg, z. B. woher er kommt"),
-    externalSource: documentReferenceSchema.shape.externalSource
-      .optional()
-      .describe("Quelle des Belegs, z. B. archiv, scanner oder mail; nur zusammen mit externalId"),
-    externalId: documentReferenceSchema.shape.externalId.optional().describe("Kennung des Dokuments in der Quelle; mit externalSource eindeutig"),
-  })
-  .strict()
-  .refine((d) => d.datei !== undefined || d.file !== undefined, { message: "Die Datei fehlt: bitte im Feld datei (oder file) mitschicken.", path: ["datei"] })
-  .refine((d) => d.datei === undefined || d.file === undefined, {
-    message: "Eine Datei je Anfrage: bitte im Feld datei oder file, nicht beide.",
-    path: ["file"],
-  })
-  .refine((d) => (d.externalSource === undefined) === (d.externalId === undefined), {
-    message: "externalSource und externalId nur zusammen angeben",
-    path: ["externalId"],
-  })
-  .register(requestSchemas, { id: "DocumentUpload" });
-
-const documentSummaryShape = {
-  id: z.uuid(),
-  filename: z.string().describe("Dateiname beim Hochladen"),
-  mimeType: z.string().describe("Erkannter Dateityp"),
-  status: z.enum(["neu", "gebucht"]).describe("neu = „Zu prüfen“ in Haben; gebucht = geprüft, gebucht und unveränderlich"),
-  booked: z.boolean().describe("Ob der Beleg gebucht ist"),
-  extractionStatus: z
-    .enum(["keine", "laeuft", "fertig", "fehler"])
-    .describe("Auslesung der Felder: keine, läuft (KI im Hintergrund), fertig oder fehler (dann in Haben von Hand)"),
-  supplierName: z.string().describe("Lieferant, leer bis ausgelesen oder eingetragen"),
-  invoiceNumber: z.string(),
-  documentDate: isoDate.nullable().describe("Belegdatum"),
-  category: z.string().nullable().describe("Kategorie der Ausgabe, z. B. software"),
-  currency: z.string(),
-  gross: inCents(z.number().int()).describe(`Brutto in Euro; ${CENTS}`),
-  externalSource: z.string().nullable(),
-  externalId: z.string().nullable(),
-  uploadedAt: timestamp,
-  bookedAt: timestamp.nullable().describe("Zeitpunkt des Buchens"),
-  cancelledOn: isoDate
-    .nullable()
-    .describe(
-      "Storniert: Datum der Gegenbuchung, die die Buchung aufhebt (im noch nicht gemeldeten Zeitraum der Belegbuchung deren Datum, sonst der Tag des Stornos); der Beleg bleibt gebucht und unveränderlich",
-    ),
-  url: z.url().describe("Seite des Belegs in Haben, dort wird geprüft und gebucht"),
-};
-
-export const documentSummarySchema = z.object(documentSummaryShape).register(responseSchemas, { id: "DocumentSummary" });
-export const documentListSchema = page(documentSummarySchema).register(responseSchemas, { id: "DocumentList" });
-
-export const documentSchema = z
-  .object({
-    ...documentSummaryShape,
-    size: z.number().int().describe("Größe in Bytes"),
-    extractedBy: z.enum(["zugferd", "xrechnung", "ki", "manuell"]).nullable().describe("Woher die Felder stammen"),
-    extractionError: z.string().nullable().describe("Hinweis oder Fehler der Auslesung"),
-    supplierUstId: z.string(),
-    dueDate: isoDate.nullable(),
-    payment: z.enum(["bank", "privat", "kasse"]),
-    note: z.string(),
-    net: inCents(z.number().int()).describe(`Netto in Euro; ${CENTS}`),
-    tax: inCents(z.number().int()).describe(`Steuer in Euro; ${CENTS}`),
-    ...documentTaxShape,
-    issues: z.array(z.string()).describe("Was vor dem Buchen noch fehlt; leer, wenn bereit oder gebucht"),
-    replacedById: z.uuid().nullable().describe("Bei einem stornierten Beleg: der neu erfasste Beleg mit derselben Datei"),
-    replacesId: z.uuid().nullable().describe("Bei einer Neuerfassung: der stornierte Beleg, den dieser ersetzt"),
-    updatedAt: timestamp,
-  })
-  .register(responseSchemas, { id: "Document" });
-
-export const documentQuerySchema = z
-  .object({
-    status: z.enum(["neu", "gebucht"]).optional().describe("neu = „Zu prüfen“, gebucht"),
-    externalSource: z.string().trim().min(1).max(40).optional().describe("Nur Belege aus dieser Quelle"),
-    externalId: z.string().trim().min(1).max(100).optional().describe("Mit externalSource: der Beleg zu diesem Dokument"),
     ...pageQuery,
   })
   .strict();

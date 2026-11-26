@@ -99,6 +99,44 @@ describe("Anforderungen und realisierte Ansprüche zum Stichtag", () => {
     expect(stand.positions.find((p) => p.originId === "f")).toMatchObject({ kind: "unbilled", date: "2027-01-20" });
   });
 
+  it("ein ausdrücklich ersetztes normales Storno erhält den Anspruch und zählt die alte Teilzahlung weiter", () => {
+    const original: DeferredInvoice = { ...final, variant: null, issueDate: "2027-01-05" };
+    const storno: DeferredInvoice = { ...cancel, issueDate: "2027-01-15" };
+    const ersatz: DeferredInvoice = { ...replacement, variant: null };
+    const paid: DeferredSettlement[] = [
+      { ...part, invoiceId: original.id, date: "2027-01-10", amount: 11_900 },
+      { ...part, invoiceId: ersatz.id, date: "2027-04-20", amount: 71_400, net: 60_000 },
+    ];
+    const inputs = [original, storno, ersatz];
+
+    const before = advanceReceivables(inputs, paid, [], "2027-01-12");
+    expect(before.positions).toMatchObject([{ id: original.id, kind: "request", open: 71_400 }]);
+    const withoutReplacement = advanceReceivables([original, storno], paid.slice(0, 1), [], "2027-02-28");
+    expect(withoutReplacement.positions).toMatchObject([{ id: storno.id, kind: "refund", open: -11_900 }]);
+    const between = advanceReceivables(inputs, paid, [], "2027-02-28");
+    expect(between.positions).toMatchObject([{ id: original.id, kind: "unbilled", open: 71_400 }]);
+    const replaced = advanceReceivables(inputs, paid, [], "2027-03-31");
+    expect(replaced.positions).toMatchObject([
+      { id: ersatz.id, originId: original.id, kind: "receivable", gross: 83_300, open: 71_400, dueDate: "2027-03-26" },
+    ]);
+    expect(summary(replaced)).toEqual({ receivables: 71_400, requests: 0, unbilled: 0, netAdvances: 0 });
+    expect(advanceReceivables(inputs, paid, [], "2027-04-30").positions).toEqual([]);
+  });
+
+  it("ein später nicht ersetztes Storno vor Leistung lässt auch den normalen Ersatz unbilanziert", () => {
+    const original: DeferredInvoice = { ...final, variant: null, issueDate: "2027-01-05" };
+    const storno: DeferredInvoice = { ...cancel, issueDate: "2027-01-15" };
+    const ersatz: DeferredInvoice = { ...replacement, variant: null, issueDate: "2027-01-16" };
+    const stornoErsatz: DeferredInvoice = { ...cancel, id: "rs", correctsId: ersatz.id, issueDate: "2027-01-19" };
+    const paid: DeferredSettlement[] = [{ ...part, invoiceId: original.id, date: "2027-01-10" }];
+    const invoices = [original, storno, ersatz, stornoErsatz];
+
+    expect(advanceReceivables(invoices, paid, [], "2027-01-18").positions).toMatchObject([{ id: ersatz.id, kind: "request", open: 71_400 }]);
+    const stand = advanceReceivables(invoices, paid, [], "2027-01-31");
+    expect(stand.positions).toMatchObject([{ id: stornoErsatz.id, kind: "refund", open: -11_900 }]);
+    expect(summary(stand)).toEqual({ receivables: 0, requests: 0, unbilled: 0, netAdvances: 10_000 });
+  });
+
   it("echte Anforderungs-Erstattung bleibt bis zum Geldrückfluss eine Anzahlungsverbindlichkeit, keine AR-Forderung", () => {
     const revoked: DeferredInvoice = {
       ...advance,

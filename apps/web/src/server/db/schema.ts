@@ -706,6 +706,24 @@ export const postfachDocuments = pgTable(
   ],
 );
 
+/**
+ * Erledigt-Vermerke zu Bescheiden aus dem Postfach (#1819). Wer einen Bescheid geprüft hat, soll nicht bis zum Ablauf der
+ * Einspruchsfrist auf die Aufgabe warten. `postfach_documents` ist append-only, deshalb steht der Vermerk als eigenes
+ * Ereignis daneben; „wieder offen" ist ein zweites Ereignis, kein Löschen. Wer wann abgehakt hat, steht im Audit-Log.
+ */
+export const postfachErledigt = pgTable(
+  "postfach_erledigt",
+  {
+    id: uuid("id").primaryKey().defaultRandom(),
+    documentId: uuid("document_id")
+      .notNull()
+      .references(() => postfachDocuments.id, { onDelete: "restrict" }),
+    art: text("art", { enum: ["geprueft", "wieder_offen"] }).notNull(),
+    at: timestamp("at", { withTimezone: true }).notNull().defaultNow(),
+  },
+  (t) => [index("postfach_erledigt_document").on(t.documentId, t.at), check("postfach_erledigt_art", sql`${t.art} in ('geprueft', 'wieder_offen')`)],
+);
+
 /** Belegabrufe für die vorausgefüllte Steuererklärung (VaSt): Anfrage der Liste und Abholung der Belege */
 export const vastRequests = pgTable("vast_requests", {
   id: uuid("id").primaryKey().defaultRandom(),
@@ -1527,8 +1545,9 @@ export const invoices = pgTable(
       sql`${t.exemptRule} is null or (${t.exemptRule} = 'leistung' and ${t.kind} = 'rechnung' and ${t.taxTreatment} in ('steuerfrei', 'ausfuhr'))`,
     ),
     check(
-      "invoices_replaces_schluss",
-      sql`${t.replacesInvoiceId} is null or (${t.replacesInvoiceId} <> ${t.id} and ${t.kind} = 'rechnung' and ${t.variant} is not distinct from 'schluss' and ${t.advanceAccounting} is not distinct from 'deferred' and ${t.correctsId} is null)`,
+      "invoices_replaces_invoice",
+      sql`${t.replacesInvoiceId} is null or (${t.replacesInvoiceId} <> ${t.id} and ${t.kind} = 'rechnung' and ${t.correctsId} is null and
+        (${t.variant} is null or (${t.variant} is not distinct from 'schluss' and ${t.advanceAccounting} is not distinct from 'deferred')))`,
     ),
     check("invoices_quote_kind", sql`${t.quoteId} is null or ${t.kind} = 'rechnung'`),
     check("invoices_plan_row", sql`${t.paymentPlanRow} is null or (${t.variant} = 'abschlag' and ${t.quoteId} is not null and ${t.paymentPlanRow} >= 0)`),
@@ -2376,7 +2395,9 @@ export const bankAccounts = pgTable(
       .notNull()
       .default("geschaeft"),
     /** Nur Zahlungsdienstleister: Anbieter (PAYMENT_PROVIDERS) und Nummer des Verrechnungskontos (1361 … bzw. 1461 …) */
-    provider: text("provider", { enum: ["paypal", "stripe", "shopify", "etsy", "ebay", "sumup", "googleplay", "appstore", "sonstige"] }),
+    provider: text("provider", { enum: ["paypal", "stripe", "shopify", "etsy", "ebay", "amazon", "sumup", "googleplay", "appstore", "sonstige"] }),
+    /** Nur Amazon: Marktplatz der Abrechnung (marketplace-name, z. B. „Amazon.de“); Pflicht beim Anlegen, nur solange das Konto keine Umsätze hat änderbar */
+    marketplace: text("marketplace"),
     ledgerIndex: smallint("ledger_index").unique(),
     /** Gehört nicht zu dieser Firma (#462): ausgeblendet, kein Abruf, kein Import; nur solange kein Umsatz zugeordnet oder verrechnet ist */
     excludedAt: timestamp("excluded_at", { withTimezone: true }),
@@ -2943,9 +2964,8 @@ export const allocations = pgTable(
       .references(() => bankTransactions.id),
     kind: allocationKindEnum("kind").notNull(),
     /**
-     * Tag, an dem die Zuordnung wirkt; leer heißt Buchungsdatum des Umsatzes. Gesetzt ist er bei der Gegenzeile einer
-     * Aufhebung (#782): Die wirkt am Tag der Aufhebung, auch wenn der Umsatz Monate älter ist. Ohne diese Spalte lägen
-     * Journal (Tag der Aufhebung) und Nebenbücher (Tag des Umsatzes) für den Zeitraum dazwischen auseinander.
+     * Wirktag der Aufhebung oder Wiederzuordnung; leer heißt Buchungsdatum des Umsatzes. Journal und Nebenbücher
+     * buchen beide an diesem Tag, auch wenn der Umsatz Monate älter ist (#782, #1454).
      */
     date: date("date", { mode: "string" }),
     invoiceId: uuid("invoice_id").references(() => invoices.id),
@@ -2955,6 +2975,8 @@ export const allocations = pgTable(
     /** Teile einer Aufteilung (Splitbuchung) tragen dieselbe ID und werden nur zusammen aufgehoben */
     splitId: uuid("split_id"),
     reversesId: uuid("reverses_id"),
+    /** Ursprüngliche Zuordnung. Die Wiederzuordnung übernimmt den Tag ihrer Aufhebung. */
+    reassignsId: uuid("reassigns_id"),
     /**
      * Rechnung: Netto und Steuer je Satz, wie gebucht (settlementTaxShares). Voranmeldung und EÜR lesen diese Werte, damit
      * alle Zahlungen zusammen genau die Steuer der Rechnung ergeben. Ältere Zuordnungen ohne: aus dem Betrag gerechnet.
@@ -3016,6 +3038,9 @@ export const allocations = pgTable(
     index("allocations_invoice").on(t.invoiceId),
     index("allocations_document").on(t.documentId),
     index("allocations_split").on(t.splitId),
+    index("allocations_reassigns").on(t.reassignsId),
+    check("allocations_reassignment", sql`${t.reassignsId} is null or (${t.reversesId} is null and ${t.date} is not null and ${t.reassignsId} <> ${t.id})`),
+    foreignKey({ name: "allocations_reassigns_fk", columns: [t.reassignsId], foreignColumns: [t.id] }),
     foreignKey({ name: "allocations_reverses_fk", columns: [t.reversesId], foreignColumns: [t.id] }),
   ],
 );

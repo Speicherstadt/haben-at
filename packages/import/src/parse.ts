@@ -5,6 +5,7 @@ import { decodeText } from "./decode.ts";
 import { isCommerzbankHeader, parseCommerzbank } from "./commerzbank.ts";
 import { isDeutscheBankGroupAltHeader, isDeutscheBankGroupHeader, parseDeutscheBankGroup } from "./deutsche-bank-group.ts";
 import { isDkbAltHeader, isDkbHeader, parseDkb, parseDkbAlt } from "./dkb.ts";
+import { isAmazonSettlementHeader, parseAmazonSettlement } from "./amazon.ts";
 import { isEbayHeader, parseEbay } from "./ebay.ts";
 import { StatementParseError } from "./errors.ts";
 import { isEtsyHeader, parseEtsy } from "./etsy.ts";
@@ -50,6 +51,11 @@ function detect(text: string, label: string): Detected {
 
   // Erkennung an den ersten 40 Zeilen (weiter sucht findHeaderRow nicht), dann einmal komplett parsen
   const head = text.split("\n", 40).join("\n");
+  // Der Settlement-Report von Amazon ist Tab-getrennt; sein Betrag enthält bei deutscher Schreibweise ein Komma,
+  // deshalb vor der Komma-Zerlegung prüfen.
+  const tab = parseCsv(head, "\t");
+  const amazon = findHeaderRow(tab, isAmazonSettlementHeader);
+  if (amazon >= 0) return { format: "amazon-settlement", rows: parseCsv(text, "\t"), headerRow: amazon };
   const semicolon = parseCsv(head, ";");
   const dkb = findHeaderRow(semicolon, isDkbHeader);
   if (dkb >= 0) return { format: "dkb-csv", rows: parseCsv(text, ";"), headerRow: dkb };
@@ -90,7 +96,7 @@ function detect(text: string, label: string): Detected {
   if (etsy >= 0) return { format: "etsy-csv", rows: parseCsv(text, ","), headerRow: etsy };
 
   throw new StatementParseError(
-    `${label} wurde nicht erkannt. Unterstützt werden CSV-Exporte von DKB, Commerzbank, BW-Bank, Deutscher Bank, Norisbank, Postbank, ING, C24, N26 und Swan, CAMT.053 (XML) sowie die Exporte von PayPal, Stripe, Shopify Payments, der Transaktionsbericht von eBay und die Monatsabrechnung von Etsy.`,
+    `${label} wurde nicht erkannt. Unterstützt werden CSV-Exporte von DKB, Commerzbank, BW-Bank, Deutscher Bank, Norisbank, Postbank, ING, C24, N26 und Swan, CAMT.053 (XML) sowie die Exporte von PayPal, Stripe, Shopify Payments, der Transaktionsbericht von eBay, die Abrechnung von Amazon und die Monatsabrechnung von Etsy.`,
   );
 }
 
@@ -134,6 +140,8 @@ export function parseStatement(bytes: Uint8Array, filename?: string): ParsedStat
       return parseShopify(detected.rows, detected.headerRow);
     case "ebay-csv":
       return parseEbay(detected.rows, detected.headerRow);
+    case "amazon-settlement":
+      return parseAmazonSettlement(detected.rows, detected.headerRow);
     case "etsy-csv":
       return parseEtsy(detected.rows, detected.headerRow);
     // Der Abruf der Transaction Search von PayPal kommt über die API (paypal/statement.ts), nicht als Datei

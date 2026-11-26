@@ -37,5 +37,21 @@ export async function importAccount(tx: Tx, statement: ParsedStatement, filename
   if (account.excludedAt) {
     throw new BankError(`${filename}: Das Konto ${account.name} ist ausgeschlossen. Bitte erst unter „Ausgeschlossene Konten“ wieder aufnehmen.`);
   }
+  // Marktplatzprüfung: eine Amazon-Abrechnung gehört nur in das Konto ihres Marktplatzes. Nennt die Datei einen
+  // Marktplatz, muss er zum Konto passen; sonst wird nichts geschrieben, statt im falschen Verrechnungskonto zu landen.
+  if (statement.marketplace) {
+    if (!account.marketplace) {
+      throw new BankError(`${filename}: Das Konto ${account.name} ist kein Amazon-Konto. Wähle das Amazon-Konto für ${statement.marketplace}.`);
+    }
+    if (account.marketplace.toLowerCase() !== statement.marketplace.toLowerCase()) {
+      throw new BankError(
+        `${filename}: Diese Abrechnung gehört zu ${statement.marketplace}; das Konto ${account.name} ist für ${account.marketplace} eingerichtet.`,
+      );
+    }
+  } else if (statement.format === "amazon-settlement" && account.provider !== "amazon") {
+    // Nennt die Abrechnung keinen Marktplatz (etwa nur Sonderzeilen ohne marketplace-name), darf sie trotzdem nicht in
+    // ein fremdes Verrechnungskonto; sonst umginge ein solcher Report die Prüfung.
+    throw new BankError(`${filename}: Das ist eine Amazon-Abrechnung. Bitte unter „Konto“ das Amazon-Konto wählen.`);
+  }
   return account;
 }

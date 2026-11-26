@@ -40,6 +40,14 @@ type Manifest = {
   };
 };
 type Werte = Record<string, unknown>;
+type Abfrage = {
+  port: string;
+  path: string;
+  interval?: string;
+  scrapeTimeout?: string;
+  authorization: { type: string; credentials: { name: string; key: string } };
+};
+type ServiceMonitor = { metadata: { labels: Record<string, string> }; spec: { selector: Auswahl; endpoints: Abfrage[] } };
 type Auswahl = { matchLabels: Record<string, string> };
 type Quelle = { podSelector?: Auswahl; namespaceSelector?: Auswahl };
 type Richtlinie = {
@@ -385,6 +393,15 @@ describe.skipIf(helm.status !== 0)("deploy/helm", () => {
       expect(app.spec.ingress).toEqual([{ from: [traefik], ports: [{ port: 3000, protocol: "TCP" }] }]);
     });
 
+    test("lässt mit metricsFrom zusätzlich Prometheus an Port 3000 der App", () => {
+      const prometheus = { namespaceSelector: { matchLabels: { "kubernetes.io/metadata.name": "monitoring" } } };
+      const alle = manifeste({ ...mitRichtlinie, networkPolicy: { ...mitRichtlinie.networkPolicy, metricsFrom: [prometheus] } });
+      expect(richtlinie(alle, "haben").spec.ingress).toEqual([
+        { from: [traefik], ports: [{ port: 3000, protocol: "TCP" }] },
+        { from: [prometheus], ports: [{ port: 3000, protocol: "TCP" }] },
+      ]);
+    });
+
     test("lässt nur App und Wiederherstellen derselben Installation an die Datenbank", () => {
       const alle = manifeste(mitRichtlinie);
       const db = richtlinie(alle, "haben-db");
@@ -401,6 +418,58 @@ describe.skipIf(helm.status !== 0)("deploy/helm", () => {
     test("legt mit eigener Datenbank nur die Richtlinie der App an", () => {
       const alle = manifeste({ ...extern, networkPolicy: mitRichtlinie.networkPolicy });
       expect(alle.filter((m) => m.kind === "NetworkPolicy").map((m) => m.metadata.name)).toEqual(["haben"]);
+    });
+  });
+
+  // /api/metrics nur mit eigenem Token (#1858); der ServiceMonitor nimmt es aus dem Secret der App (#1870)
+  describe("metrics", () => {
+    const token = "0123456789abcdef0123456789abcdef";
+    const mitToken = { ...basis, app: { secretEnv: { ...(basis.app as { secretEnv: object }).secretEnv, HABEN_METRICS_TOKEN: token } } };
+    const monitor = (alle: Manifest[]) => finde(alle, "ServiceMonitor", "haben") as unknown as ServiceMonitor;
+
+    test("legt ohne Schalter keinen ServiceMonitor an, auch mit Token", () => {
+      expect(manifeste(mitToken).some((m) => m.kind === "ServiceMonitor")).toBe(false);
+    });
+
+    test("fragt /api/metrics am Service der App mit dem Token aus dem Secret der App ab", () => {
+      const alle = manifeste({
+        ...mitToken,
+        metrics: { serviceMonitor: { enabled: true, interval: "2m", scrapeTimeout: "30s", labels: { release: "kube-prometheus-stack" } } },
+      });
+      const sm = monitor(alle);
+      const service = finde(alle, "Service", "haben");
+      expect(Object.entries(sm.spec.selector.matchLabels).every(([k, v]) => service.metadata.labels?.[k] === v)).toBe(true);
+      expect(sm.spec.selector.matchLabels["app.kubernetes.io/component"]).toBe("app");
+      expect(sm.metadata.labels.release).toBe("kube-prometheus-stack");
+      expect(sm.spec.endpoints).toEqual([
+        {
+          port: "http",
+          path: "/api/metrics",
+          interval: "2m",
+          scrapeTimeout: "30s",
+          authorization: { type: "Bearer", credentials: { name: "haben-app", key: "HABEN_METRICS_TOKEN" } },
+        },
+      ]);
+      expect(finde(alle, "Secret", "haben-app").stringData?.HABEN_METRICS_TOKEN).toBe(token);
+    });
+
+    test("legt die PrometheusRule nur mit Schalter an, mit den Regeln aus files/prometheus-regeln.yml", () => {
+      expect(manifeste(mitToken).some((m) => m.kind === "PrometheusRule")).toBe(false);
+      const regel = finde(
+        manifeste({ ...basis, metrics: { prometheusRule: { enabled: true, labels: { release: "kube-prometheus-stack" } } } }),
+        "PrometheusRule",
+        "haben",
+      );
+      const datei = Bun.YAML.parse(readFileSync(join(root, "deploy/helm/files/prometheus-regeln.yml"), "utf8")) as { groups: unknown[] };
+      expect((regel.spec as unknown as { groups: unknown[] }).groups).toEqual(datei.groups);
+      expect(regel.metadata.labels?.release).toBe("kube-prometheus-stack");
+    });
+
+    test("nimmt mit app.existingSecret das Token von dort", () => {
+      const werte = { ...basis, app: { existingSecret: "haben-geheim" }, postgresql: { enabled: false }, backup: extern.backup };
+      const sm = monitor(manifeste({ ...werte, metrics: { serviceMonitor: { enabled: true } } }));
+      expect(sm.spec.endpoints[0]?.authorization.credentials).toEqual({ name: "haben-geheim", key: "HABEN_METRICS_TOKEN" });
+      expect(sm.spec.endpoints[0]).not.toHaveProperty("interval");
     });
   });
 
@@ -430,6 +499,28 @@ describe.skipIf(helm.status !== 0)("deploy/helm", () => {
       meldung: "app.tmpSizeLimit in Anführungszeichen",
     },
     { fall: "mit HTTPRoute ohne Gateway", werte: { ...basis, httpRoute: { enabled: true } }, meldung: "httpRoute.parentRefs fehlt" },
+    {
+      fall: "mit ServiceMonitor ohne Token",
+      werte: { ...basis, metrics: { serviceMonitor: { enabled: true } } },
+      meldung: "metrics.serviceMonitor braucht app.secretEnv.HABEN_METRICS_TOKEN",
+    },
+    // Die App startete sonst nicht (env.ts), und mit ihr bliebe der Pod samt Backup NotReady
+    {
+      fall: "mit zu kurzem Token für die Metriken",
+      werte: { ...basis, app: { secretEnv: { ...(basis.app as { secretEnv: object }).secretEnv, HABEN_METRICS_TOKEN: "kurz" } } },
+      meldung: "app.secretEnv.HABEN_METRICS_TOKEN braucht mindestens 32 Zeichen",
+    },
+    {
+      fall: "mit dem Abstand des ServiceMonitors als Zahl",
+      werte: {
+        ...basis,
+        metrics: { serviceMonitor: { enabled: true, interval: 60 } },
+        app: { existingSecret: "g" },
+        postgresql: { enabled: false },
+        backup: extern.backup,
+      },
+      meldung: "metrics.serviceMonitor.interval in Anführungszeichen",
+    },
     {
       fall: "mit einem geheimen Wert als Zahl",
       werte: { ...basis, app: { secretEnv: { ...(basis.app as { secretEnv: object }).secretEnv, HABEN_SETUP_CODE: 12345678 } } },

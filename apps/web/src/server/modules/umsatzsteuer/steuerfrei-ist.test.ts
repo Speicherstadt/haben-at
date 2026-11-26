@@ -289,4 +289,24 @@ describe.skipIf(!testDatabaseUrl)("Kz 43 und 48 bei Ist im Zeitraum der Leistung
       expect(await kennzahl(behandlung, OKT)).toBe(100_000);
       expect(await invoices.leistungsmonatHinweisFuer(schluss)).toMatch(/\(netto 1\.000,00\s€, Umsatzsteuer 0,00\s€\)/);
     }, 60_000);
+
+  /*
+   * Rechnungsaustausch (#1454) mit Kennzeichen exempt_rule (#1312): Storno und Ersatz dokumentieren dieselbe Leistung, sie
+   * zählt einmal im Leistungsmonat (§ 14c Abs. 1 UStG greift nicht, der Ersatz weist keine Steuer aus; UStAE 14.11).
+   */
+  for (const kontenrahmen of ["SKR03", "SKR04"] as const)
+    for (const versteuerung of ["ist", "soll"] as const)
+      for (const bezahlt of [true, false])
+        it(`${kontenrahmen}, ${versteuerung}, ${bezahlt ? "bezahlt" : "offen"}: Rechnungsaustausch zählt Kz 48 einmal im Oktober`, async () => {
+          await firma(kontenrahmen, versteuerung);
+          const leistung = { serviceFrom: "2026-10-01", serviceTo: "2026-10-31" };
+          const original = await rechnung("steuerfrei", 100_000, { ...leistung, issueDate: "2026-10-12" });
+          if (bezahlt) await zahlung(original.id, "2026-10-20", "1000,00");
+          await invoices.cancelInvoice(actor, original.id, "2026-11-10");
+          await rechnung("steuerfrei", 100_000, { ...leistung, issueDate: "2026-11-15", contactId: original.contactId, replacesInvoiceId: original.id });
+
+          expect.soft(await kennzahl("steuerfrei", OKT)).toBe(100_000);
+          expect.soft(await kennzahl("steuerfrei", NOV)).toBe(0);
+          await journalSauber([OKT, NOV]);
+        }, 30_000);
 });

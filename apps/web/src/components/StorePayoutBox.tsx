@@ -4,6 +4,7 @@ import { useState } from "react";
 import { formatDate } from "../lib/format.ts";
 import type { getBankOverview } from "../server/functions/bank.ts";
 import { takeOverStorePayoutFn } from "../server/functions/stores.ts";
+import { type Auswahl, auswahlFuer, umgeschaltet } from "./store-payout-auswahl.ts";
 
 type StorePayoutView = NonNullable<NonNullable<Awaited<ReturnType<typeof getBankOverview>>["detail"]>["storePayout"]>;
 
@@ -25,7 +26,8 @@ export function StorePayoutBox({
   run: (work: () => Promise<unknown>) => void;
 }) {
   const takeOver = useServerFn(takeOverStorePayoutFn);
-  const [chosen, setChosen] = useState(() => new Set(view.months.filter((m) => m.suggested).map((m) => m.id)));
+  const [auswahl, setAuswahl] = useState<Auswahl | null>(null);
+  const chosen = auswahlFuer(view.months, auswahl);
   const sum = view.months.filter((m) => chosen.has(m.id)).reduce((s, m) => s + m.amount, 0);
   const difference = amount - sum;
 
@@ -46,15 +48,6 @@ export function StorePayoutBox({
     );
   }
 
-  function toggle(id: string) {
-    setChosen((current) => {
-      const next = new Set(current);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  }
-
   return (
     <div className="stack" style={{ gap: 10 }} role="group" aria-labelledby="store-payout-heading">
       <div className="section-label" id="store-payout-heading">
@@ -67,7 +60,12 @@ export function StorePayoutBox({
         </p>
         {view.months.map((month) => (
           <label key={month.id} className="checkbox">
-            <input type="checkbox" checked={chosen.has(month.id)} onChange={() => toggle(month.id)} disabled={busy} />
+            <input
+              type="checkbox"
+              checked={chosen.has(month.id)}
+              onChange={() => setAuswahl((current) => umgeschaltet(view.months, current, month.id))}
+              disabled={busy}
+            />
             <span>
               {formatDate(month.bookingDate)} · <span className="amount">{formatEuro(month.amount)}</span>
               <span className="small muted" style={{ display: "block" }}>

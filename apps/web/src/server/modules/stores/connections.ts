@@ -12,6 +12,7 @@ import {
   type GooglePlayClientOptions,
 } from "@haben/import";
 import { eq } from "drizzle-orm";
+import { vatTerritory } from "@haben/core";
 import { z } from "zod";
 import { decrypt, encrypt } from "../../crypto.ts";
 import { withActor } from "../../db/actor.ts";
@@ -156,9 +157,12 @@ export async function setStoreContact(actor: string, input: z.input<typeof store
   const row = await loadRow(data.store);
   if (!row) throw new StoreError(`Der Abruf für ${STORE_LABELS[data.store]} ist nicht eingerichtet.`);
   if (data.contactId) {
-    const [contact] = await db.select({ land: schema.contacts.land }).from(schema.contacts).where(eq(schema.contacts.id, data.contactId));
+    const [contact] = await db
+      .select({ land: schema.contacts.land, plz: schema.contacts.plz })
+      .from(schema.contacts)
+      .where(eq(schema.contacts.id, data.contactId));
     if (!contact) throw new StoreError("Kontakt nicht gefunden.");
-    if (contact.land === "DE")
+    if (contact.land === "DE" && !vatTerritory(contact.land, contact.plz))
       throw new StoreError("Die Store-Gesellschaft sitzt im Ausland (Google Commerce Ltd und Apple Distribution International in Irland).");
     // Nur ein neuer Kontakt wird geprüft: ein bisheriger, der inzwischen kein Kunde mehr ist, bleibt gewählt
     const problem = data.contactId === row.config.contactId ? null : await contactRoleProblem(db, data.contactId, "kunde");
@@ -175,7 +179,7 @@ export async function setStoreContact(actor: string, input: z.input<typeof store
 export async function storeContactChoices(): Promise<{ id: string; name: string; land: string; ustId: string }[]> {
   const chosen = new Set((await db.select({ config: schema.storeConnections.config }).from(schema.storeConnections)).map((r) => r.config.contactId));
   return (await listContacts())
-    .filter((c) => c.land !== "DE" && (c.isCustomer || chosen.has(c.id)))
+    .filter((c) => (c.land !== "DE" || vatTerritory(c.land, c.plz)) && (c.isCustomer || chosen.has(c.id)))
     .map((c) => ({ id: c.id, name: c.name, land: c.land, ustId: c.ustId }));
 }
 

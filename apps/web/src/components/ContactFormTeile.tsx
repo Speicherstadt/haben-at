@@ -76,25 +76,6 @@ export function ContactBasics({ initial, isNew, nextNumber }: { initial: Contact
   );
 }
 
-/** Abschnitt „Anschrift“ */
-export function ContactAddress({ initial }: { initial: ContactInput }) {
-  return (
-    <section className="form-section" aria-labelledby="contact-address">
-      <h2 id="contact-address">Anschrift</h2>
-      <Field label="Straße und Hausnummer">
-        {(control) => <input {...control} name="strasse" defaultValue={initial.strasse} autoComplete="street-address" />}
-      </Field>
-      <div className="form-row cols-address">
-        <Field label="PLZ">{(control) => <input {...control} name="plz" defaultValue={initial.plz} autoComplete="postal-code" inputMode="numeric" />}</Field>
-        <Field label="Ort">{(control) => <input {...control} name="ort" defaultValue={initial.ort} autoComplete="address-level2" />}</Field>
-        <Field label="Land (z. B. DE)">
-          {(control) => <input {...control} name="land" defaultValue={initial.land} maxLength={2} autoComplete="country" className="uppercase" />}
-        </Field>
-      </div>
-    </section>
-  );
-}
-
 /** Abschnitt „Steuer und Zahlung“: USt-IdNr. (gehört dem Formular, für den Hinweis auf gleiche Nummern) und IBAN samt Vorschlag vom Beleg */
 export function ContactTax({
   initial,

@@ -1,0 +1,4 @@
+ALTER TABLE "allocations" ADD COLUMN "reassigns_id" uuid;--> statement-breakpoint
+ALTER TABLE "allocations" ADD CONSTRAINT "allocations_reassigns_fk" FOREIGN KEY ("reassigns_id") REFERENCES "public"."allocations"("id") ON DELETE no action ON UPDATE no action;--> statement-breakpoint
+CREATE INDEX "allocations_reassigns" ON "allocations" USING btree ("reassigns_id");--> statement-breakpoint
+ALTER TABLE "allocations" ADD CONSTRAINT "allocations_reassignment" CHECK ("allocations"."reassigns_id" is null or ("allocations"."reverses_id" is null and "allocations"."date" is not null and "allocations"."reassigns_id" <> "allocations"."id"));

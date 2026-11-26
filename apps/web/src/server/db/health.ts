@@ -17,17 +17,13 @@ async function readHealth(client: postgres.Sql, signal: AbortSignal): Promise<"p
   }
 }
 
-/**
- * Öffentliche Probe für Monitore, darum englisch und ohne Version. `status` nach draft-inadarei-api-health-check
- * (pass, fail; warn mit 200 bleibt frei für später), `reason` mit festen Werten. Monitore verlassen sich auf die Werte.
- */
-export function createHealthCheck(client: postgres.Sql) {
-  let pending: ReturnType<typeof readHealth> | undefined;
-  const headers = { "Cache-Control": "no-store" };
+export type HealthStatus = Awaited<ReturnType<typeof readHealth>>;
 
-  return async (): Promise<Response> => {
-    // Bei einer hängenden Verbindung belegt auch eine Folgeprobe keinen weiteren Platz im Pool.
-    pending ??= new Promise((resolve) => {
+/** Prüfung mit Frist von 2 Sekunden; bei einer hängenden Verbindung belegt auch eine Folgeprobe keinen weiteren Platz im Pool */
+export function createHealthProbe(client: postgres.Sql): () => Promise<HealthStatus> {
+  let pending: Promise<HealthStatus> | undefined;
+  return () =>
+    (pending ??= new Promise((resolve) => {
       const controller = new AbortController();
       const timer = setTimeout(() => {
         resolve("database");
@@ -38,8 +34,19 @@ export function createHealthCheck(client: postgres.Sql) {
         pending = undefined;
         resolve(status);
       });
-    });
-    const status = await pending;
+    }));
+}
+
+/**
+ * Öffentliche Probe für Monitore, darum englisch und ohne Version. `status` nach draft-inadarei-api-health-check
+ * (pass, fail; warn mit 200 bleibt frei für später), `reason` mit festen Werten. Monitore verlassen sich auf die Werte.
+ */
+export function createHealthCheck(client: postgres.Sql) {
+  const probe = createHealthProbe(client);
+  const headers = { "Cache-Control": "no-store" };
+
+  return async (): Promise<Response> => {
+    const status = await probe();
     return status === "pass" ? Response.json({ status }, { headers }) : Response.json({ status: "fail", reason: status }, { status: 503, headers });
   };
 }

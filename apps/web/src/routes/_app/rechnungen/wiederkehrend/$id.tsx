@@ -12,14 +12,8 @@ import { ConfirmDialog } from "../../../../components/ConfirmDialog.tsx";
 export const Route = createFileRoute("/_app/rechnungen/wiederkehrend/$id")({
   loader: ({ params }) => getRecurringDetail({ data: params.id }),
   head: ({ loaderData }) => ({ meta: [{ title: `${loaderData?.recurring.name ?? "Vorlage"} · Haben` }] }),
-  component: RecurringRoute,
+  component: RecurringDetailPage,
 });
-
-/** Beim Wechsel zu einer anderen Vorlage bleibt die Seite stehen; sie entsteht je Vorlage neu, sonst blieben Formular und Meldung der vorigen (#1839) */
-function RecurringRoute() {
-  const { recurring } = Route.useLoaderData();
-  return <RecurringDetailPage key={recurring.id} />;
-}
 
 function RecurringDetailPage() {
   const { recurring, invoices, contacts, textBlocks, units, defaults, sevdesk, fastbill } = Route.useLoaderData();

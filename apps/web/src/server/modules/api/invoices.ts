@@ -53,6 +53,7 @@ function invoiceOut(row: ListRow, invoice: Invoice, lines: InvoiceLine[], baseUr
   return {
     ...summaryOut(row, baseUrl),
     correctsId: invoice.correctsId,
+    replacesInvoiceId: invoice.replacesInvoiceId,
     serviceFrom: invoice.serviceFrom,
     serviceTo: invoice.serviceTo,
     paymentTermDays: invoice.paymentTermDays,
@@ -105,7 +106,8 @@ async function respondWith(id: string, request: ApiRequest, status = 200, header
   return ok(invoiceOut(loaded.row, loaded.invoice, loaded.lines, request.baseUrl), status, headers);
 }
 
-async function contactProblem(contactId: string | null | undefined): Promise<ApiResult | null> {
+/** Unbekannter Kontakt als 422; ob er Kunde ist, prüft das Modul beim Schreiben */
+export async function contactProblem(contactId: string | null | undefined): Promise<ApiResult | null> {
   if (!contactId || (await getContact(contactId))) return null;
   return fail("unprocessable", "Kontakt nicht gefunden. Erst über /kontakte anlegen.");
 }
@@ -177,7 +179,7 @@ export async function updateInvoiceHandler(request: ApiRequest): Promise<ApiResu
   if (!found) return notFound(INVOICE_NOT_FOUND);
   const { invoice, lines } = found;
   if (invoice.status !== "draft") return fail("conflict", LOCKED);
-  if (invoice.kind !== "rechnung" || invoice.variant || invoice.quoteId) {
+  if (invoice.kind !== "rechnung" || invoice.variant || (invoice.quoteId && !invoice.replacesInvoiceId)) {
     return fail("conflict", "Storno, Korrektur, Abschlags- und Schlussrechnung sowie Rechnungen zu einem Angebot bitte in Haben bearbeiten.");
   }
   const body = request.body as Record<string, unknown>;

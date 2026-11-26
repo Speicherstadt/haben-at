@@ -11,6 +11,8 @@ export async function transactionAllocations(id: string) {
       kind: schema.allocations.kind,
       amount: schema.allocations.amount,
       reversesId: schema.allocations.reversesId,
+      date: schema.allocations.date,
+      reassignsId: schema.allocations.reassignsId,
       splitId: schema.allocations.splitId,
       createdAt: schema.allocations.createdAt,
       invoiceId: schema.allocations.invoiceId,

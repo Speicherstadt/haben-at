@@ -49,5 +49,6 @@ export {
   postfachDocumentFile,
   runDuePostfachFetch,
 } from "./postfach.ts";
+export { erledigtStand, erledigtVermerken, type ErledigtArt, type ErledigtStand } from "./postfach-erledigt.ts";
 export { fetchVastBelege, lastVastRequest, listVastBelege, vastBelegXml } from "./vast.ts";
 export { runDueFristenMails } from "./fristen-mail.ts";

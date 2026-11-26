@@ -19,6 +19,7 @@ import {
   autoFetchStatus,
   disableAutoFetch,
   enableAutoFetch,
+  erledigtVermerken,
   fetchPostfach,
   lastPostfachRequest,
   listPostfachDocuments,
@@ -103,3 +104,12 @@ export const disablePostfachAutoFetch = createServerFn({ method: "POST" })
     await disableAutoFetch(context.user.id);
     return { ok: true };
   });
+
+/**
+ * Bescheid als geprüft abhaken oder wieder öffnen (#1819). Der Vermerk ist ein Ereignis, kein Zustandsfeld: `postfach_documents`
+ * bleibt unverändert, und im Audit-Log steht, wer wann abgehakt hat.
+ */
+export const markPostfachDocument = createServerFn({ method: "POST" })
+  .middleware([authMiddleware])
+  .validator(z.object({ id: z.string().uuid(), art: z.enum(["geprueft", "wieder_offen"]) }))
+  .handler(async ({ data, context }) => erledigtVermerken(data.id, data.art, context.user.id));
